@@ -1,0 +1,43 @@
+{
+    "matmat": {
+        "version": "0.9.0-beta"
+    },
+    "environment": {
+        "python_version": "3.11.15",
+        "python_implementation": "CPython",
+        "platform": "Linux-6.8.0-117-generic-x86_64-with-glibc2.39",
+        "hostname": "WKS-LNX-TEIXEIRA2",
+        "user": "teixeiraa"
+    },
+    "run": {
+        "data_utc": "2026-06-01",
+        "time_utc": "13:13:29",
+        "datetime_utc": [
+            "2026-06-01T13:13:29+00:00"
+        ]
+    },
+    "workflow": {
+        "kind": "pipeline",
+        "name": "aggregation",
+        "identity": {
+            "path_in": {
+                "accounts": "/home/teixeiraa/Documents/01-data/260602-matmat_training/1-EEIO_foundations/2-national_open_economy/1-input/3.10.2_France_2019",
+                "bridges": "/home/teixeiraa/Documents/01-data/260602-matmat_training/1-EEIO_foundations/2-national_open_economy/1-input/bridge_matrices.xlsx"
+            },
+            "path_out": "/home/teixeiraa/Documents/01-data/260602-matmat_training/1-EEIO_foundations/2-national_open_economy/2-output",
+            "export_format": [
+                "excel"
+            ],
+            "clean_path_out": false,
+            "base_year": null,
+            "proj_year": null,
+            "scenario_name": null,
+            "extension_names": [
+                "dom_ghg_combustion",
+                "dom_ghg_emissions",
+                "imp_ghg_emissions"
+            ],
+            "calculate_accounts": false
+        }
+    }
+}

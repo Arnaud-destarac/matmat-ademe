@@ -579,7 +579,7 @@ class WaterExtractor(ExtensionExtractor):
     This extractor filters all rows whose stressor name starts with "Water",
     from the appropriate extension depending on the EXIOBASE version.
     """
-    KEY_WATER =  "Water"
+    KEY_WATER =  "Water Consumption Blue"
     KEY_WATER_UNIT = "Mm3"
 
     def extract(self, aggregate: bool = False) -> pymrio.Extension:
@@ -682,7 +682,7 @@ class BiogeochemicalExtractor(ExtensionExtractor):
     and returns them as a standalone `pymrio.Extension`.
     """
 
-    KEYS_BIOGEOCHEMICAL = ["N", "NH3", "P"]
+    KEYS_BIOGEOCHEMICAL = ["N - agriculture", "NH3 - agriculture", "P - agriculture", "N2O - agriculture", "NOX - agriculture"]
 
     def extract(self) -> pymrio.Extension:
         prefixes = tuple(f"{k} - " for k in self.KEYS_BIOGEOCHEMICAL)
