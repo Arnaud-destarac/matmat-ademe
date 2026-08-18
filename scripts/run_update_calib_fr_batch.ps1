@@ -56,7 +56,7 @@ foreach ($year in $baseYears) {
 
     Set-UpdateCalibFrSettings -Year $year
 
-    uv run python -m matmat.cli -p update_calib_fr -st $calibSettingsPath
+    uv run python -m matmat.cli -p update_calib_fr -st $calibSettingsPath --no_confirm
 
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Echec update_calib_fr pour base_year=$year (code $LASTEXITCODE)" -ForegroundColor Red

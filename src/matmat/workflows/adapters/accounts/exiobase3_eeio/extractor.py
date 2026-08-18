@@ -681,8 +681,7 @@ class BiogeochemicalExtractor(ExtensionExtractor):
     chemicals specify in KEYS_BIOGEOCHEMICAL
     and returns them as a standalone `pymrio.Extension`.
     """
-
-    KEYS_BIOGEOCHEMICAL = ["N - agriculture", "NH3 - agriculture", "P - agriculture", "N2O - agriculture", "NOX - agriculture"]
+    KEYS_BIOGEOCHEMICAL = ["N", "NH3", "P", "N2O - agriculture", "NOX", "NOx", "SOx", "SO2"]
 
     def extract(self) -> pymrio.Extension:
         prefixes = tuple(f"{k} - " for k in self.KEYS_BIOGEOCHEMICAL)

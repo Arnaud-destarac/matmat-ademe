@@ -10,7 +10,7 @@ et que leurs sorties sont disponibles.
 $projectDir = Split-Path -Parent $PSScriptRoot
 
 $engineSettingsPath = Join-Path $projectDir "data\4-PlaneFR\Settings\4-engine\settings_engine_France_shocks.json"
-$shocksDir          = Join-Path $projectDir "data\3-workshops\2-shocks\1-transitions_2050"
+$shocksDir          = Join-Path $projectDir "data\4-PlaneFR\2-shocks\1-transitions_2050"
 
 Set-Location $projectDir
 
@@ -61,7 +61,7 @@ function Set-EngineSettings {
         # path_in.accounts fixe a Base_year_2015, quel que soit l'ordre des
         # runs baseline precedents
         $settings.path_in.accounts = Set-YearInPath -Path $settings.path_in.accounts -Year 2015
-        $settings.path_in.shock    = ".\3-workshops\2-shocks\1-transitions_2050\$ScenarioName"
+        $settings.path_in.shock    = ".\4-PlaneFR\2-shocks\1-transitions_2050\$ScenarioName"
         $settings.path_out         = Join-Path $outBaseDir $ScenarioName
     }
 
@@ -71,7 +71,7 @@ function Set-EngineSettings {
 }
 
 # === Etape engine : baseline 2015, baseline 2019, puis un run par scenario
-# present dans data\3-workshops\2-shocks\1-transitions_2050 ===
+# present dans data\4-PlaneFR\2-shocks\1-transitions_2050 ===
 
 $baselineYears = 2015, 2019
 $scenarios     = Get-ChildItem -Path $shocksDir -Directory | Select-Object -ExpandProperty Name
@@ -81,7 +81,7 @@ foreach ($year in $baselineYears) {
 
     Set-EngineSettings -ScenarioName $null -Year $year
 
-    uv run python -m matmat.cli -e eeio -st $engineSettingsPath
+    uv run python -m matmat.cli -e eeio -st $engineSettingsPath --no_confirm
 
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Echec engine pour baseline Base_year_$year (code $LASTEXITCODE)" -ForegroundColor Red
@@ -93,7 +93,7 @@ foreach ($scenario in $scenarios) {
 
     Set-EngineSettings -ScenarioName $scenario
 
-    uv run python -m matmat.cli -e eeio -st $engineSettingsPath
+    uv run python -m matmat.cli -e eeio -st $engineSettingsPath --no_confirm
 
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Echec engine pour $scenario (code $LASTEXITCODE)" -ForegroundColor Red
