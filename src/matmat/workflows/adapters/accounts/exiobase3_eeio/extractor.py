@@ -681,7 +681,7 @@ class BiogeochemicalExtractor(ExtensionExtractor):
     chemicals specify in KEYS_BIOGEOCHEMICAL
     and returns them as a standalone `pymrio.Extension`.
     """
-    KEYS_BIOGEOCHEMICAL = ["N", "NH3", "P", "N2O - agriculture", "NOX", "NOx", "SOx", "SO2"]
+    KEYS_BIOGEOCHEMICAL = ["N", "NH3", "P", "N2O - agriculture", "Pxx", "NOX"]
 
     def extract(self) -> pymrio.Extension:
         prefixes = tuple(f"{k} - " for k in self.KEYS_BIOGEOCHEMICAL)
@@ -693,3 +693,23 @@ class BiogeochemicalExtractor(ExtensionExtractor):
             extension_in=self._extensions,
             extension_name=cst.BIOGEOCHEMICAL,
         )
+
+class AirEmissionsExtractor(ExtensionExtractor):
+    """
+    Extract air emissions data from the raw EXIOBASE 'air_emissions' satellite
+    account.
+
+    Unlike the other extractors here, this one does not re-filter stressors out
+    of the merged extension pool by substance name: it receives the original,
+    unmerged 'air_emissions' extension (captured before concatenation in
+    Exiobase3EEIO._concat_extension_in_pymrio_format) and returns it as-is, so
+    every stressor EXIOBASE classifies as an air emission is included. Some of
+    these stressors (e.g. CO2, CH4, N2O, SF6, HFC, PFC) also appear in
+    ghg_emissions / biogeochemical, since those extractors are built from
+    substance-name filters on the same underlying data.
+    """
+
+    def extract(self) -> pymrio.Extension:
+        extension_out = copy.deepcopy(self._extensions)
+        extension_out.name = cst.AIR_EMISSIONS
+        return extension_out

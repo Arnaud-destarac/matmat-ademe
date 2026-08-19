@@ -92,6 +92,7 @@ class Exiobase3EEIO(AbstractAdapter):
         cst.WATER: cls_extractor.WaterExtractor,
         cst.LAND_USE: cls_extractor.LandUseExtractor,
         cst.BIOGEOCHEMICAL: cls_extractor.BiogeochemicalExtractor,
+        cst.AIR_EMISSIONS: cls_extractor.AirEmissionsExtractor,
     }
     SUPPORTED_VERSIONS_TO_DOI = {
         "3.8.2": "10.5281/zenodo.5589597",
@@ -349,6 +350,20 @@ class Exiobase3EEIO(AbstractAdapter):
         by one aggregated extension named 'extensions'.
         """
         accounts = self.get_processed_data(self.KEY_PYMRIO_ACCOUNTS)
+
+        # air_emissions is extracted as a straight pass-through of the raw
+        # EXIOBASE 'air_emissions' satellite account (see AirEmissionsExtractor),
+        # so it must be captured here, before it gets folded into the merged
+        # extension pool below.
+        if cst.AIR_EMISSIONS in self._id.extension_names:
+            self._raw_air_emissions = copy.deepcopy(
+                getattr(accounts, cst.AIR_EMISSIONS)
+            )
+            for attr in ("F", "F_Y", "unit"):
+                df = getattr(self._raw_air_emissions, attr)
+                if df is not None:
+                    df.index = df.index.set_names(self.KEY_EXTENSION_CATEGORY)
+
         extensions = pymrio.concate_extension(
             [getattr(accounts, ext) for ext in accounts.get_extensions()],
             name=cst.KEY_EXTENSIONS,
@@ -379,7 +394,12 @@ class Exiobase3EEIO(AbstractAdapter):
 
         for extension_name, extractor_cls in self.EXTRACTOR_MAP.items():
             if extension_name in self._id.extension_names:
-                extractor = extractor_cls(extensions)
+                source = (
+                    self._raw_air_emissions
+                    if extension_name == cst.AIR_EMISSIONS
+                    else extensions
+                )
+                extractor = extractor_cls(source)
                 setattr(accounts, extension_name, extractor.extract())
         accounts.remove_extension(extensions.name)
 

@@ -12,8 +12,11 @@ Pour un row_name et un scénario donnés :
 
 dS est initialisé à 0 pour tous les indicateurs (même format que les feuilles Fx_*
 de S_extraction.xlsx : indicateurs en ligne, secteurs en colonne) ; seules les
-lignes dont le row_name figure dans my_manual_param.xlsx sont recalculées. Les
-row_name de my_manual_param.xlsx absents de S_extraction.xlsx sont ignorés.
+lignes dont le row_name figure dans my_manual_param.xlsx ET dont le choc est
+renseigné et non nul sont recalculées (un choc à 0 ou vide signifie "pas encore
+calibré" et laisse dS=0, sans quoi dS deviendrait le ratio compensatoire qui
+annule l'effet volume de x). Les row_name de my_manual_param.xlsx absents de
+S_extraction.xlsx sont ignorés.
 
 dS_x_dom (.pkl et .xlsx) est écrit, par scénario et par extension choquée, dans
 MatMat/matmat-ademe/.../2-shocks/1-transitions_2050/<scenario>/extensions/dom_<lp>/.
@@ -100,7 +103,7 @@ def compute_ds(lp_name, x_dom):
 
         for short, folder_name in SCENARIO_FOLDER_NAMES.items():
             shock = row[short]
-            if pd.isna(shock):
+            if pd.isna(shock) or shock == 0:
                 continue
             f_row_2050 = f_row_base * (1 + shock)
             s_2050 = f_row_2050 / x_dom.loc[folder_name]
