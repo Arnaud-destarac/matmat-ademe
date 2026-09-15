@@ -100,13 +100,23 @@ def process_extension(ext_name: str, src_dir: str):
         with open(src_pkl, "rb") as f:
             df = pickle.load(f)
 
+        # Certaines extensions (ex. raw_materials) arrivent avec un index MultiIndex
+        # à un seul niveau (chaque clé est un tuple ('Primary Crops - Rice',)) au lieu
+        # d'un Index plat de chaînes ('Primary Crops - Rice'). C'est un artefact de
+        # cast_index_to_multiindex() côté pipeline d'extraction (sa contrepartie
+        # convert_single_level_multi_index_to_regular_index() n'est jamais appelée) ;
+        # on l'annule ici pour que l'index exporté soit plat.
+        if isinstance(df.index, pd.MultiIndex) and df.index.nlevels == 1:
+            df.index = df.index.get_level_values(0)
+
         if "source" in df.index.names:
             df = df.groupby(level="gas").sum()
             df.index.name = "indicator"
 
-        if "Primary Crops - Rice" in df.index:
-            df = df.sum().rename("RMC").to_frame().T
-            df.index.name = "indicator"
+        if "Primary Crops - Rice" in df.index and "RMC" not in df.index:
+            total = df.sum().rename("RMC").to_frame().T
+            total.index.name = "indicator"
+            df = pd.concat([df, total])
 
         filename = os.path.basename(src_pkl)
 

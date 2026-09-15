@@ -113,6 +113,38 @@ def compute_ds(lp_name, x_dom):
     return ds_by_scenario
 
 
+def make_pickle_portable(df):
+    """Force les niveaux d'index/colonnes et les colonnes de type texte en
+    dtype 'object' avant pickling. Le format pickle des dtypes 'string'
+    (StringDtype, y compris backend pyarrow) n'est pas stable d'une version
+    de pandas à l'autre : un pickle écrit avec pandas >= 3.0 (où le texte
+    est en StringDtype par défaut) ne peut pas être relu par le pandas 2.x
+    utilisé par matmat-ademe (.venv), quel que soit l'interpréteur Python
+    utilisé pour lancer ce script."""
+
+    def sanitize_index(index):
+        if isinstance(index, pd.MultiIndex):
+            if any(isinstance(level.dtype, pd.StringDtype) for level in index.levels):
+                return index.set_levels(
+                    [
+                        level.astype(object) if isinstance(level.dtype, pd.StringDtype) else level
+                        for level in index.levels
+                    ]
+                )
+            return index
+        if isinstance(index.dtype, pd.StringDtype):
+            return index.astype(object)
+        return index
+
+    df = df.copy()
+    df.index = sanitize_index(df.index)
+    df.columns = sanitize_index(df.columns)
+    string_cols = [c for c in df.columns if isinstance(df[c].dtype, pd.StringDtype)]
+    if string_cols:
+        df[string_cols] = df[string_cols].astype(object)
+    return df
+
+
 def write_ds_outputs(lp_name, ds_by_scenario):
     for short, folder_name in SCENARIO_FOLDER_NAMES.items():
         ds = ds_by_scenario[short]
@@ -123,7 +155,7 @@ def write_ds_outputs(lp_name, ds_by_scenario):
         out_dir.mkdir(parents=True, exist_ok=True)
         if not isinstance(ds.index, pd.MultiIndex):
             ds.index = pd.MultiIndex.from_arrays([ds.index], names=ds.index.names)
-        ds.to_pickle(out_dir / "dS_x_dom.pkl")
+        make_pickle_portable(ds).to_pickle(out_dir / "dS_x_dom.pkl")
         ds.to_excel(out_dir / "dS_x_dom.xlsx", sheet_name="dS_x_dom")
         print(f"[write] {out_dir / 'dS_x_dom.xlsx'} (+ .pkl)")
 

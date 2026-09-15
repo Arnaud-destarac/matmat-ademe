@@ -6,7 +6,9 @@ dossier INPUT) vers data/3.10.2/ :
 - ghg_combustion : effondre en une seule ligne "CO2" ; imp_ghg_combustion n'existe
   pas en amont, on le crée à zéro (les émissions de combustion sont par
   construction 100% domestiques).
-- raw_materials : effondre en une seule ligne "RMC".
+- raw_materials : conserve toutes les lignes (indexées par "indicator", au
+  niveau "sector") et ajoute une ligne "RMC" = somme de toutes les matières
+  premières.
 - F_x_dom de ghg_combustion et raw_materials : ces deux extensions n'ont pas de
   F_x_dom.pkl fourni en amont ; on le recalcule à partir de F_Y.pkl + F_Z.pkl
   (part domestique uniquement), effondré de la même façon.
@@ -28,6 +30,22 @@ def collapse_to_single_row(df, label):
     return collapsed
 
 
+def add_sum_row(df, label):
+    """Réduit l'index à son dernier niveau (le "sector", renommé "indicator")
+    si besoin, en conservant toutes les lignes, et ajoute une ligne `label`
+    égale à leur somme (ex. "RMC" = somme de toutes les matières premières)."""
+    if df.index.nlevels > 1:
+        df = df.set_index(df.index.get_level_values(-1))
+    df.index.name = "indicator"
+
+    if label in df.index:
+        return df
+
+    total = df.sum().rename(label).to_frame().T
+    total.index.name = "indicator"
+    return pd.concat([df, total])
+
+
 def save_pickle(df, out_path, note=""):
     """Écrit df en pickle sous out_path (en créant les dossiers manquants) et log le résultat."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -37,11 +55,13 @@ def save_pickle(df, out_path, note=""):
     print(f"{label}: {out_path.relative_to(OUTPUT)}  shape={df.shape}  index={df.index.names}")
 
 
-def compute_f_x_dom_from_f_y_f_z(extension_name, label):
+def compute_f_x_dom_from_f_y_f_z(extension_name, label, keep_detail=False):
     """Recalcule F_x_dom.pkl (empreinte production, part domestique) à partir de
-    F_Y.pkl + F_Z.pkl, pour une extension dont l'index doit être effondré en une
-    seule ligne `label` — utilisé pour ghg_combustion ("CO2") et raw_materials
-    ("RMC"), qui n'ont pas de F_x_dom.pkl fourni directement en amont."""
+    F_Y.pkl + F_Z.pkl, pour une extension qui n'a pas de F_x_dom.pkl fourni
+    directement en amont. Si keep_detail=False, effondre l'index en une seule
+    ligne `label` (ghg_combustion : "CO2"). Si keep_detail=True, conserve une
+    ligne par matière première (indexée par "indicator", au niveau "sector")
+    et ajoute une ligne `label` = somme (raw_materials : "RMC")."""
     paths_by_scenario = defaultdict(list)
     for in_path in sorted([
         *INPUT.rglob(f"dom_{extension_name}/F_Y.pkl"),
@@ -56,9 +76,19 @@ def compute_f_x_dom_from_f_y_f_z(extension_name, label):
                 df = pickle.load(f)
             df = df[df.index.get_level_values("origin") == "domestic"]
             df = df.droplevel("origin")
-            if label not in df.index:
+
+            if keep_detail:
+                if df.index.nlevels > 1:
+                    df = df.set_index(df.index.get_level_values(-1))
+                    df.index.name = "indicator"
+                df = df.sum(axis=1).groupby(level="indicator").sum().to_frame()
+            elif label not in df.index:
                 df = collapse_to_single_row(df, label).sum(axis=1).to_frame()
+
             f_x_dom = f_x_dom.add(df, fill_value=0)
+
+        if keep_detail and label not in f_x_dom.index:
+            f_x_dom = add_sum_row(f_x_dom, label)
 
         out_path = OUTPUT / scenario_dir.relative_to(INPUT) / f"dom_{extension_name}" / "F_x_dom.pkl"
         save_pickle(f_x_dom, out_path)
@@ -113,7 +143,7 @@ for in_path in sorted([
 
 compute_f_x_dom_from_f_y_f_z("ghg_combustion", "CO2")
 
-# --- 3. *_raw_materials : sum -> "RMC" ---
+# --- 3. *_raw_materials : conserve toutes les lignes, ajoute "RMC" = somme ---
 for in_path in sorted([
     *INPUT.rglob("*raw_materials/d_cba_k.pkl"),
     *INPUT.rglob("*raw_materials/d_cba.pkl"),
@@ -121,9 +151,8 @@ for in_path in sorted([
     with open(in_path, "rb") as f:
         df = pickle.load(f)
 
-    if "RMC" not in df.index:
-        df = collapse_to_single_row(df, "RMC")
+    df = add_sum_row(df, "RMC")
 
     save_pickle(df, OUTPUT / in_path.relative_to(INPUT))
 
-compute_f_x_dom_from_f_y_f_z("raw_materials", "RMC")
+compute_f_x_dom_from_f_y_f_z("raw_materials", "RMC", keep_detail=True)

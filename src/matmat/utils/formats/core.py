@@ -120,7 +120,56 @@ class PickleFormat(AbstractFormat):
         return pd.read_pickle(full_path)
 
     def export(self, df: pd.DataFrame, path: str, file_name: str):
+        df = self._make_pickle_portable(df)
         df.to_pickle(f"{os.path.join(path, file_name)}.{self.EXTENSION}")
+
+    @staticmethod
+    def _make_pickle_portable(df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Casts any pandas StringDtype (numpy- or pyarrow-backed) found in the
+        data, the index or the columns to plain object dtype.
+
+        StringDtype's pickled representation is not stable across pandas
+        versions (e.g. a pickle written with pandas >= 3.0, where strings
+        default to StringDtype, cannot be unpickled with pandas 2.x), so
+        this keeps produced pickle files readable regardless of which
+        pandas version wrote them.
+        """
+
+        def _sanitize_index(index: pd.Index) -> pd.Index:
+            if isinstance(index, pd.MultiIndex):
+                if any(
+                    isinstance(level.dtype, pd.StringDtype)
+                    for level in index.levels
+                ):
+                    return index.set_levels(
+                        [
+                            (
+                                level.astype(object)
+                                if isinstance(level.dtype, pd.StringDtype)
+                                else level
+                            )
+                            for level in index.levels
+                        ]
+                    )
+                return index
+            if isinstance(index.dtype, pd.StringDtype):
+                return index.astype(object)
+            return index
+
+        df = df.copy()
+        df.index = _sanitize_index(df.index)
+        df.columns = _sanitize_index(df.columns)
+
+        string_cols = [
+            col
+            for col in df.columns
+            if isinstance(df[col].dtype, pd.StringDtype)
+        ]
+        if string_cols:
+            df[string_cols] = df[string_cols].astype(object)
+
+        return df
 
 
 class CsvFormat(AbstractFormat):
