@@ -1,17 +1,25 @@
 """
 Pour chaque extension dans data/Monde/base-year_2015 et base-year_2019/extensions :
-- transforme d_cba.pkl / F_x_dom.pkl / F_Y_tot.pkl en versions Monde, Europe et France
+- transforme d_cba.pkl / F_x_dom.pkl / F_Y_tot.pkl en versions Monde, Europe et une par région Exiobase
 - Monde  : supprime les Y_category indésirables, somme tout -> (region="World", Y_category="all", sector="all")
 - Europe : idem mais en ne gardant que les 27 premières régions -> (region="Europe", ...)
-- France : idem mais en ne gardant que la région "FR" -> (region="France", ...)
+- Région (hors FR) : idem mais en ne gardant qu'une seule région Exiobase (ex. "DK"...)
+  -> (region=<code>, ...) ; mêmes fichiers (d_cba/F_x_dom/F_Y_tot) et même arborescence
+  que Monde/Europe (dossier <ext_name>, pas de préfixe dom_), exportée dans 2019_<code>
+  (une par région listée dans detail_levels.xlsx, UE et hors UE)
+- France (FR) : cas particulier conservé tel quel -- seul F_Y_tot.pkl est exporté,
+  dans dom_{ext_name}, car d_cba/F_x_dom pour la France proviennent déjà d'un autre
+  pipeline (scénarios France dom_/imp_ existants dans data/3.10.2)
 
 base-year_2015 (SRC_DIR[0]) ne produit qu'une version France, copiée dans tous
 les autres dossiers de scénarios déjà présents dans data/3.10.2 (dom_{ext}) ;
-base-year_2019 (SRC_DIR[1]) produit les trois versions dans leurs dossiers dédiés.
+base-year_2019 (SRC_DIR[1]) produit la version Monde, Europe, et une version par
+région Exiobase, chacune dans son dossier dédié (2019_W, 2019_EU27, 2019_<code>).
 """
 
 import os
 import pickle
+import shutil
 import pandas as pd
 
 # Chemins (relatifs à ce script, pas au répertoire de travail courant)
@@ -24,17 +32,8 @@ SRC_DIR = [
 ]
 
 DATA_DIR = "C:\\Users\\Arnaud\\Documents\\CIRED\\PlaneFR\\Code\\Module_PlaneFR\\data\\3.10.2"
-DST_MONDE = os.path.join(DATA_DIR, "2019_World", "extensions")
-DST_EUROPE = os.path.join(DATA_DIR, "2019_Europe_27", "extensions")
-DST_FRANCE = os.path.join(DATA_DIR, "2019_France", "extensions")
-
-# Découvrir dynamiquement les autres dossiers de scénarios déjà présents dans 3.10.2
-EXCLUDED_DIRS = {"2019_World", "2019_Europe_27", "2019_France"}
-OTHER_DIRS = [
-    os.path.join(DATA_DIR, d, "extensions")
-    for d in os.listdir(DATA_DIR)
-    if os.path.isdir(os.path.join(DATA_DIR, d, "extensions")) and d not in EXCLUDED_DIRS
-]
+DST_MONDE = os.path.join(DATA_DIR, "2019_W", "extensions")
+DST_EUROPE = os.path.join(DATA_DIR, "2019_EU27", "extensions")
 
 # Y_categories à exclure. Ce label ("Exports: Total (fob)") est celui des données
 # BRUTES en amont (SRC_DIR) ; il ne faut pas le confondre avec le label "Exports"
@@ -43,18 +42,32 @@ OTHER_DIRS = [
 # pipeline, deux libellés différents pour le même concept, pas une incohérence.
 YCATS_EXCLUDED = {"Exports: Total (fob)"}
 
-# Liste des 27 régions européennes (UE) issue du fichier de référence
+# Liste de toutes les régions Exiobase (UE puis hors UE / agrégats "Rest of World")
+# issue du fichier de référence ; les 27 premières sont les régions européennes (UE).
 DETAIL_LEVELS_PATH = os.path.join(PLANEFR_DATA_DIR, "Outputs", "World", "base-year_2019", "system", "detail_levels.xlsx")
 with open(DETAIL_LEVELS_PATH, "rb") as f:
     _regions_df = pd.read_excel(f, sheet_name="regions")
-EU_REGIONS = _regions_df["region"].astype(str).to_list()[:27]
+ALL_REGIONS = _regions_df["region"].astype(str).to_list()
+EU_REGIONS = ALL_REGIONS[:27]
+
+# Une destination 2019_<code>/extensions par région Exiobase (ex. 2019_FR, 2019_DK...)
+REGION_TARGETS = [(code, os.path.join(DATA_DIR, f"2019_{code}", "extensions")) for code in ALL_REGIONS]
+
+# Découvrir dynamiquement les autres dossiers de scénarios déjà présents dans 3.10.2
+# (scénarios France 2015, ex. Tech_NZE...) en excluant nos propres dossiers de sortie.
+EXCLUDED_DIRS = {"2019_W", "2019_EU27"} | {f"2019_{code}" for code in ALL_REGIONS}
+OTHER_DIRS = [
+    os.path.join(DATA_DIR, d, "extensions")
+    for d in os.listdir(DATA_DIR)
+    if os.path.isdir(os.path.join(DATA_DIR, d, "extensions")) and d not in EXCLUDED_DIRS
+]
 
 
 def transform(df: pd.DataFrame, mode: str) -> pd.DataFrame:
     """
     mode='monde'  -> toutes les régions sauf Y_cats exclus, somme -> World/all/all
     mode='europe' -> 27 premières régions sauf Y_cats exclus, somme -> Europe/all/all
-    mode='france' -> région FR uniquement, somme -> France/all/all
+    mode=<code>   -> une seule région Exiobase (ex. 'FR', 'DK'...), somme -> <code>/all/all
     """
     if "Y_category" in df.columns.names:
         mask_ycat = ~df.columns.get_level_values("Y_category").isin(YCATS_EXCLUDED)
@@ -62,12 +75,12 @@ def transform(df: pd.DataFrame, mode: str) -> pd.DataFrame:
 
     if mode == "europe":
         df = df.loc[:, df.columns.get_level_values("region").isin(EU_REGIONS)]
-    elif mode == "france":
-        df = df.loc[:, df.columns.get_level_values("region") == "FR"]
+    elif mode != "monde":
+        df = df.loc[:, df.columns.get_level_values("region") == mode]
 
     totals = df.sum(axis=1)
 
-    region_label = {"monde": "World", "europe": "Europe", "france": "France"}[mode]
+    region_label = {"monde": "World", "europe": "Europe"}.get(mode, mode)
     if "Y_category" in df.columns.names:
         col_index = pd.MultiIndex.from_tuples([(region_label, "all", "all")], names=["region", "Y_category", "sector"])
     else:
@@ -126,18 +139,44 @@ def process_extension(ext_name: str, src_dir: str):
             # Ne s'applique que pour F_Y_tot.pkl (srcs_pkl[2]).
             if filename != "F_Y_tot.pkl" or (ext_name == "ghg_emissions" or ext_name == "raw_materials"):
                 continue
-            result = transform(df, "france")
+            result = transform(df, "FR")
             for path in OTHER_DIRS:
-                _save_result(os.path.join(path, f"dom_{ext_name}"), filename, result, "france")
+                _save_result(os.path.join(path, f"dom_{ext_name}"), filename, result, "FR")
         else:
-            for mode, dst_base in [("monde", DST_MONDE), ("europe", DST_EUROPE), ("france", DST_FRANCE)]:
-                if mode == "france" and (filename != "F_Y_tot.pkl" or (ext_name == "ghg_emissions" or ext_name == "raw_materials")):
+            targets = [("monde", DST_MONDE), ("europe", DST_EUROPE)] + REGION_TARGETS
+            for mode, dst_base in targets:
+                # Seule la France (FR) est traitée à part : les autres régions
+                # suivent exactement le même traitement que Monde/Europe (les
+                # 3 fichiers, dossier <ext_name> sans préfixe dom_).
+                is_france = mode == "FR"
+                if is_france and (filename != "F_Y_tot.pkl" or (ext_name == "ghg_emissions" or ext_name == "raw_materials")):
                     continue
-                out_dir = os.path.join(dst_base, ext_name if mode in ("europe", "monde") else f"dom_{ext_name}")
+                out_dir = os.path.join(dst_base, ext_name if not is_france else f"dom_{ext_name}")
                 _save_result(out_dir, filename, transform(df, mode), mode)
 
 
+def _clean_generated_outputs():
+    """Supprime entièrement le dossier extensions/ de chaque sortie Monde/Europe/
+    région (2019_W, 2019_EU27, 2019_<code>) avant de le régénérer -- SAUF 2019_FR.
+
+    Monde/Europe/région (hors FR) sont entièrement produits par ce script : on
+    peut donc les recréer de zéro sans perdre de données externes. 2019_FR, lui,
+    n'est pas entièrement produit par ce script -- comme les scénarios France
+    2015 dans OTHER_DIRS, il contient déjà des sous-dossiers dom_{ext}/imp_{ext}
+    (d_cba.pkl, F_x_dom.pkl...) provenant d'un autre pipeline, dans lesquels ce
+    script ne fait qu'ajouter dom_{ext}/F_Y_tot.pkl. Le supprimer effacerait ces
+    données externes (vécu : un run précédent a écrasé 2019_FR de cette façon).
+    """
+    for mode, dst_base in [("monde", DST_MONDE), ("europe", DST_EUROPE)] + REGION_TARGETS:
+        if mode == "FR":
+            continue
+        if os.path.isdir(dst_base):
+            shutil.rmtree(dst_base)
+
+
 def main():
+    _clean_generated_outputs()
+
     for src_dir in SRC_DIR:
         extensions = [
             d for d in os.listdir(src_dir)
