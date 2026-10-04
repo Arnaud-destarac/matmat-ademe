@@ -12,6 +12,9 @@ dossier INPUT) vers data/3.10.2/ :
 - F_x_dom de ghg_combustion et raw_materials : ces deux extensions n'ont pas de
   F_x_dom.pkl fourni en amont ; on le recalcule à partir de F_Y.pkl + F_Z.pkl
   (part domestique uniquement), effondré de la même façon.
+- M, M_k (et M_RoW côté imp) : lignes reformatées comme celles de d_cba.
+- S_x_dom (ghg_emissions), S_Y / S_Z (ghg_combustion, raw_materials) : lignes
+  reformatées comme celles de F_x_dom (part domestique uniquement).
 """
 
 import pickle
@@ -94,11 +97,38 @@ def compute_f_x_dom_from_f_y_f_z(extension_name, label, keep_detail=False):
         save_pickle(f_x_dom, out_path)
 
 
+def reformat_s_like_f_x_dom(extension_name, label, keep_detail=False):
+    """Reformate les lignes de S_Y.pkl / S_Z.pkl comme celles de F_x_dom.pkl :
+    part domestique uniquement, puis soit effondrée en une seule ligne `label`
+    (ghg_combustion : "CO2"), soit une ligne par matière première + une ligne
+    `label` = somme (raw_materials : "RMC"). Les colonnes sont conservées."""
+    for in_path in sorted([
+        *INPUT.rglob(f"dom_{extension_name}/S_Y.pkl"),
+        *INPUT.rglob(f"dom_{extension_name}/S_Z.pkl"),
+    ]):
+        with open(in_path, "rb") as f:
+            df = pickle.load(f)
+
+        if "origin" in df.index.names:
+            df = df[df.index.get_level_values("origin") == "domestic"]
+            df = df.droplevel("origin")
+
+        if keep_detail:
+            df = add_sum_row(df, label)
+        elif label not in df.index:
+            df = collapse_to_single_row(df, label)
+
+        save_pickle(df, OUTPUT / in_path.relative_to(INPUT))
+
+
 # --- 1a. dom_ghg_emissions : drop ghg_combustion, droplevel source, rename gas -> indicator ---
 for in_path in sorted([
     *INPUT.rglob("dom_ghg_emissions/d_cba_k.pkl"),
     *INPUT.rglob("dom_ghg_emissions/d_cba.pkl"),
     *INPUT.rglob("dom_ghg_emissions/F_x_dom.pkl"),
+    *INPUT.rglob("dom_ghg_emissions/M.pkl"),
+    *INPUT.rglob("dom_ghg_emissions/M_k.pkl"),
+    *INPUT.rglob("dom_ghg_emissions/S_x_dom.pkl"),
 ]):
     with open(in_path, "rb") as f:
         df = pickle.load(f)
@@ -114,6 +144,9 @@ for in_path in sorted([
 for in_path in sorted([
     *INPUT.rglob("imp_ghg_emissions/d_cba_k.pkl"),
     *INPUT.rglob("imp_ghg_emissions/d_cba.pkl"),
+    *INPUT.rglob("imp_ghg_emissions/M.pkl"),
+    *INPUT.rglob("imp_ghg_emissions/M_k.pkl"),
+    *INPUT.rglob("imp_ghg_emissions/M_RoW.pkl"),
 ]):
     with open(in_path, "rb") as f:
         df = pickle.load(f)
@@ -128,6 +161,8 @@ for in_path in sorted([
 for in_path in sorted([
     *INPUT.rglob("dom_ghg_combustion/d_cba_k.pkl"),
     *INPUT.rglob("dom_ghg_combustion/d_cba.pkl"),
+    *INPUT.rglob("dom_ghg_combustion/M.pkl"),
+    *INPUT.rglob("dom_ghg_combustion/M_k.pkl"),
 ]):
     with open(in_path, "rb") as f:
         df = pickle.load(f)
@@ -142,11 +177,15 @@ for in_path in sorted([
     save_pickle(df * 0, imp_path, note="imp zeros")
 
 compute_f_x_dom_from_f_y_f_z("ghg_combustion", "CO2")
+reformat_s_like_f_x_dom("ghg_combustion", "CO2")
 
 # --- 3. *_raw_materials : conserve toutes les lignes, ajoute "RMC" = somme ---
 for in_path in sorted([
     *INPUT.rglob("*raw_materials/d_cba_k.pkl"),
     *INPUT.rglob("*raw_materials/d_cba.pkl"),
+    *INPUT.rglob("*raw_materials/M.pkl"),
+    *INPUT.rglob("*raw_materials/M_k.pkl"),
+    *INPUT.rglob("imp_raw_materials/M_RoW.pkl"),
 ]):
     with open(in_path, "rb") as f:
         df = pickle.load(f)
@@ -156,3 +195,4 @@ for in_path in sorted([
     save_pickle(df, OUTPUT / in_path.relative_to(INPUT))
 
 compute_f_x_dom_from_f_y_f_z("raw_materials", "RMC", keep_detail=True)
+reformat_s_like_f_x_dom("raw_materials", "RMC", keep_detail=True)
