@@ -7,7 +7,7 @@ $projectDir   = Split-Path -Parent $PSScriptRoot
 $settingsPath = Join-Path $projectDir "data\4-PlaneFR\Settings\1-exiobase3_eeio\exiobase3_eeio_settings.json"
 
 $baseYears = 2015, 2019
-$versions  = "3.9.6", "3.10.2"
+$versions  = "3.11.2"
 
 Set-Location $projectDir
 
@@ -41,38 +41,12 @@ foreach ($baseYear in $baseYears) {
     }
 }
 
-# Remplace F_x_dom.pkl (extension water) de la version 3.10.2 par celui de la version 3.9.6,
-# pour chaque base_year traite.
-foreach ($baseYear in $baseYears) {
-    $sourceFile = Join-Path $projectDir "data\4-PlaneFR\1-accounts\Exiobase\3.9.6_${baseYear}\3.9.6_pxp_${baseYear}\extensions\water\F_x_dom.pkl"
-    $destFile   = Join-Path $projectDir "data\4-PlaneFR\1-accounts\Exiobase\3.10.2_${baseYear}\3.10.2_pxp_${baseYear}\extensions\water\F_x_dom.pkl"
+# à insérer si besoin
 
-    if (Test-Path $sourceFile) {
-        Copy-Item -Path $sourceFile -Destination $destFile -Force
-        Write-Host "F_x_dom.pkl (water) copie de 3.9.6 vers 3.10.2 pour base_year=$baseYear" -ForegroundColor Green
-    } else {
-        Write-Host "Fichier source introuvable pour base_year=$baseYear : $sourceFile" -ForegroundColor Red
-    }
-}
-
-# Remplace F_x_dom.pkl (extension energy) de la version 3.10.2 par celui de la version 3.9.6,
-# pour chaque base_year traite.
-foreach ($baseYear in $baseYears) {
-    $sourceFile = Join-Path $projectDir "data\4-PlaneFR\1-accounts\Exiobase\3.9.6_${baseYear}\3.9.6_pxp_${baseYear}\extensions\energy\F_x_dom.pkl"
-    $destFile   = Join-Path $projectDir "data\4-PlaneFR\1-accounts\Exiobase\3.10.2_${baseYear}\3.10.2_pxp_${baseYear}\extensions\energy\F_x_dom.pkl"
-
-    if (Test-Path $sourceFile) {
-        Copy-Item -Path $sourceFile -Destination $destFile -Force
-        Write-Host "F_x_dom.pkl (energy) copie de 3.9.6 vers 3.10.2 pour base_year=$baseYear" -ForegroundColor Green
-    } else {
-        Write-Host "Fichier source introuvable pour base_year=$baseYear : $sourceFile" -ForegroundColor Red
-    }
-}
-
-# Lance le moteur eeio (uniquement pour la version 3.10.2), en adaptant
+# Lance le moteur eeio (uniquement pour la version 3.11.2), en adaptant
 # path_in et path_out a chaque base_year dans settings_engine_World.json.
 $engineSettingsPath = Join-Path $projectDir "data\4-PlaneFR\Settings\4-engine\settings_engine_World.json"
-$engineVersion = "3.10.2"
+$engineVersion = "3.11.2"
 
 function Set-EngineJsonValueAndSave {
     param(

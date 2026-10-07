@@ -20,6 +20,7 @@ Contents
 - ValueAddedExtractor
 - WaterExtractor
 - LandUseExtractor
+- Deforestation Extractor
 
 # Todo: add to md file description on how to add new extension from exiobase.
 
@@ -708,8 +709,18 @@ class AirEmissionsExtractor(ExtensionExtractor):
     ghg_emissions / biogeochemical, since those extractors are built from
     substance-name filters on the same underlying data.
     """
-
+   
     def extract(self) -> pymrio.Extension:
         extension_out = copy.deepcopy(self._extensions)
         extension_out.name = cst.AIR_EMISSIONS
+        return extension_out
+
+class DeforestationExtractor(ExtensionExtractor):
+    """
+    Extract deforestation-related data from EXIOBASE satellite extensions.
+    """
+
+    def extract(self) -> pymrio.Extension:
+        extension_out = copy.deepcopy(self._extensions)
+        extension_out.name = cst.DEFORESTATION
         return extension_out

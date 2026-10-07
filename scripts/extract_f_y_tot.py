@@ -53,6 +53,8 @@ EXTENSION_NAMES = [
     "land_use",
     "raw_materials",
     "water",
+    "deforestation",
+    "air_emissions"
 ]
 
 # Relative to data_dir (see config.toml).
@@ -61,7 +63,7 @@ PATH_IN = r".\01-sources_public\exiobase"
 # Final destination, one folder per base_year, matching the
 # {extensions}/{extension_name}/F_Y_tot.pkl layout.
 WORLD_PATH_OUT = r".\4-PlaneFR\Outputs\World"
-WORLD_VERSION = "3.10.2"
+WORLD_VERSION = "3.11.2"
 WATER_OVERRIDE_VERSION = "3.9.6"
 
 FILE_NAME = "F_Y_tot"

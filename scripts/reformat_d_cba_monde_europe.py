@@ -31,7 +31,7 @@ SRC_DIR = [
     os.path.join(PLANEFR_DATA_DIR, "Outputs", "World", "base-year_2019", "extensions"),
 ]
 
-DATA_DIR = "C:\\Users\\Arnaud\\Documents\\CIRED\\PlaneFR\\Code\\Module_PlaneFR\\data\\3.10.2"
+DATA_DIR = "C:\\Users\\Arnaud\\Documents\\CIRED\\PlaneFR\\Code\\Module_PlaneFR\\data\\3.11.2"
 DST_MONDE = os.path.join(DATA_DIR, "2019_W", "extensions")
 DST_EUROPE = os.path.join(DATA_DIR, "2019_EU27", "extensions")
 

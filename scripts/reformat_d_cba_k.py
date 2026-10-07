@@ -22,8 +22,8 @@ from collections import defaultdict
 from pathlib import Path
 import pandas as pd
 
-INPUT = Path(r"C:\Users\Arnaud\Documents\CIRED\PlaneFR\Code\Module_PlaneFR\data\3.10.2")
-OUTPUT = Path(r"C:\Users\Arnaud\Documents\CIRED\PlaneFR\Code\Module_PlaneFR\data\3.10.2")
+INPUT = Path(r"C:\Users\Arnaud\Documents\CIRED\PlaneFR\Code\Module_PlaneFR\data\3.11.2")
+OUTPUT = Path(r"C:\Users\Arnaud\Documents\CIRED\PlaneFR\Code\Module_PlaneFR\data\3.11.2")
 
 
 def collapse_to_single_row(df, label):
