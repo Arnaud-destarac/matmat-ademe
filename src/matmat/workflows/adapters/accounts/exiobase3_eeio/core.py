@@ -27,10 +27,11 @@ Identity fields
 The identity specifies the dataset location and scope:
 - path_in, path_out
 - export_format (e.g. ["pickle"])
-- version (supported: from 3.8.2 to 3.10.2)
+- version (supported: from 3.8.2 to 3.11.2)
 - system (e.g. "pxp", "ixi")
 - base_year (1995–2022)
-- extension_names (subset of supported extensions)
+- extension_names (custom extensions ghg_emissions / raw_materials, raw
+  EXIOBASE satellite accounts copied as-is, or ["all"])
 
 Example identity (JSON)
 -----------------------
@@ -83,17 +84,16 @@ import matmat.core.accounts.builder as acc_builders
 
 
 class Exiobase3EEIO(AbstractAdapter):
-    EXTRACTOR_MAP = {
+    # Extensions built by filtering the merged extension pool
+    CUSTOM_EXTRACTORS = {
         cst.GHG_EMISSIONS: cls_extractor.GreenhouseGasEmissionsExtractor,
-        cst.ENERGY: cls_extractor.EnergyExtractor,
         cst.RAW_MATERIALS: cls_extractor.RawMaterialsExtractor,
-        cst.LABOR: cls_extractor.LabourExtractor,
-        cst.VALUE_ADDED: cls_extractor.ValueAddedExtractor,
-        cst.WATER: cls_extractor.WaterExtractor,
-        cst.LAND_USE: cls_extractor.LandUseExtractor,
-        cst.BIOGEOCHEMICAL: cls_extractor.BiogeochemicalExtractor,
-        cst.AIR_EMISSIONS: cls_extractor.AirEmissionsExtractor,
     }
+    # Every other extension is a straight pass-through of the raw EXIOBASE
+    # satellite account of the same name (see cls_extractor.PassthroughExtractor)
+    # Keyword in extension_names to extract every available extension (custom
+    # ones + all raw satellite accounts found in the EXIOBASE archive)
+    KEY_ALL_EXTENSIONS = "all"
     SUPPORTED_VERSIONS_TO_DOI = {
         "3.8.2": "10.5281/zenodo.5589597",
         "3.8.2-restricted": None,
@@ -102,6 +102,7 @@ class Exiobase3EEIO(AbstractAdapter):
         "3.9.6": "10.5281/zenodo.15689391",
         "3.10.1": "10.5281/zenodo.18937492",
         "3.10.2": "10.5281/zenodo.20051562",
+        "3.11.2": "10.5281/zenodo.23039074"
     }
     SUPPORTED_BASE_YEAR_RANGE = {
         elt: (
@@ -150,8 +151,11 @@ class Exiobase3EEIO(AbstractAdapter):
             - base_year : int | str
                 Reference year used to build input path.
             - extension_names : list[str]
-                List of requested satellite accounts (must be included in
-                EXTRACTOR_MAP.keys()).
+                List of requested satellite accounts: names of
+                CUSTOM_EXTRACTORS, raw EXIOBASE satellite account names
+                (e.g. "land", "nutrients"), or ["all"] to extract
+                every available extension. Validated after loading, once the
+                raw satellite accounts of the archive are known.
 
         Attributes Set
         --------------
@@ -169,8 +173,8 @@ class Exiobase3EEIO(AbstractAdapter):
         Raises
         ------
         ValueError
-            If `id_.version` is not supported or if one or more requested extensions
-            are not available.
+            If `id_.version` or `id_.base_year` is not supported, or if no
+            extension is requested.
         """
         super().__init__(
             id_=id_, perform_validation=False, no_confirm=no_confirm
@@ -178,7 +182,11 @@ class Exiobase3EEIO(AbstractAdapter):
 
         self._validate_version()
         self._validate_base_year()
-        self._validate_extensions()
+        if not self._id.extension_names:
+            raise ValueError(
+                "No extension requested: set 'extension_names' (or "
+                f"['{self.KEY_ALL_EXTENSIONS}'])."
+            )
 
         self._build_paths()
 
@@ -235,15 +243,45 @@ class Exiobase3EEIO(AbstractAdapter):
         # Normalize the identity in-place to avoid str instead of int
         self._id.base_year = year
 
-    def _validate_extensions(self) -> None:
-        """Validate requested extension names."""
-        requested = set(self._id.extension_names)
-        available = set(self.EXTRACTOR_MAP.keys())
-        invalid = sorted(requested - available)
+    def _resolve_extension_names(self) -> None:
+        """
+        Resolve and validate requested extension names against the raw
+        satellite accounts of the loaded EXIOBASE archive.
+
+        ``["all"]`` is expanded to every custom extension plus every raw
+        satellite account. The resolved list
+        replaces ``self._id.extension_names`` and the extension-category
+        detail levels are initialized accordingly.
+
+        Raises
+        ------
+        ValueError
+            If one or more requested extensions are not available.
+        """
+        accounts = self.get_processed_data(self.KEY_PYMRIO_ACCOUNTS)
+        available = list(self.CUSTOM_EXTRACTORS) + sorted(
+            accounts.get_extensions()
+        )
+
+        requested = self._id.extension_names
+        if self.KEY_ALL_EXTENSIONS in requested:
+            requested = available
+        invalid = sorted(set(requested) - set(available))
         if invalid:
             raise ValueError(
-                f"Unavailable extensions: {invalid}. Available extensions: {sorted(available)}."
+                f"Unavailable extensions: {invalid}. Available extensions in "
+                f"EXIOBASE v{self._id.version}: {available} "
+                f"(or ['{self.KEY_ALL_EXTENSIONS}'])."
             )
+
+        self._id.extension_names = list(dict.fromkeys(requested))
+        self.processed_data[self.KEY_DL][
+            dl.DetailLevelKind.EXTENSION_CATEGORIES.value
+        ] = {
+            ext: dl.ExtensionCategoriesDL(ext)
+            for ext in self._id.extension_names
+        }
+        log.info(f"Extensions to extract: {self._id.extension_names}")
 
     def _init_detail_levels(self) -> Dict[str, Any]:
         """
@@ -253,16 +291,14 @@ class Exiobase3EEIO(AbstractAdapter):
         -------
         dict
             Mapping {detail_level_kind: detail_level_object}, with a nested mapping
-            for extension categories keyed by extension name.
+            for extension categories keyed by extension name (filled once
+            extension names are resolved, see `_resolve_extension_names`).
         """
         detail_levels: Dict[str, Any] = {
             dl.DetailLevelKind.SECTORS.value: dl.SectorsDL(),
             dl.DetailLevelKind.REGIONS.value: dl.RegionsDL(),
             dl.DetailLevelKind.FINAL_DEMAND_CATEGORIES.value: dl.FinalDemandCategoriesDL(),
-            dl.DetailLevelKind.EXTENSION_CATEGORIES.value: {
-                ext: dl.ExtensionCategoriesDL(ext)
-                for ext in self._id.extension_names
-            },
+            dl.DetailLevelKind.EXTENSION_CATEGORIES.value: {},
         }
 
         return detail_levels
@@ -332,9 +368,9 @@ class Exiobase3EEIO(AbstractAdapter):
     def process(self):
         """
         Extracts and computes all requested extensions listed in
-        `self._extension_names`. Assumes `self._extension_names` was validated
-        during initialization.
+        `self._id.extension_names`, once resolved against the loaded archive.
         """
+        self._resolve_extension_names()
         self._concat_extension_in_pymrio_format()
         self._extract_and_organize_mrio_extensions()
         self._build_detail_levels()
@@ -351,21 +387,25 @@ class Exiobase3EEIO(AbstractAdapter):
         """
         accounts = self.get_processed_data(self.KEY_PYMRIO_ACCOUNTS)
 
-        # air_emissions is extracted as a straight pass-through of the raw
-        # EXIOBASE 'air_emissions' satellite account (see AirEmissionsExtractor),
-        # so it must be captured here, before it gets folded into the merged
-        # extension pool below.
-        if cst.AIR_EMISSIONS in self._id.extension_names:
-            self._raw_air_emissions = copy.deepcopy(
-                getattr(accounts, cst.AIR_EMISSIONS)
-            )
+        # Pass-through extensions (all but CUSTOM_EXTRACTORS) are extracted
+        # from the raw EXIOBASE satellite account, so they must be captured
+        # here, before they get folded into the merged extension pool below.
+        self._raw_extensions = {}
+        for ext_name in self._id.extension_names:
+            if ext_name in self.CUSTOM_EXTRACTORS:
+                continue
+            raw_ext = copy.deepcopy(getattr(accounts, ext_name))
             for attr in ("F", "F_Y", "unit"):
-                df = getattr(self._raw_air_emissions, attr)
+                df = getattr(raw_ext, attr)
                 if df is not None:
                     df.index = df.index.set_names(self.KEY_EXTENSION_CATEGORY)
+            self._raw_extensions[ext_name] = raw_ext
 
+        # Sort extension names: pymrio loads EXIOBASE satellites from a set,
+        # so their order (and thus the stressor order of the merged
+        # extension) would otherwise vary from one Python process to another.
         extensions = pymrio.concate_extension(
-            [getattr(accounts, ext) for ext in accounts.get_extensions()],
+            [getattr(accounts, ext) for ext in sorted(accounts.get_extensions())],
             name=cst.KEY_EXTENSIONS,
         )
 
@@ -385,22 +425,23 @@ class Exiobase3EEIO(AbstractAdapter):
         """
         Extract requested satellite extensions and attach them to the pymrio accounts.
 
-        Each extension listed in ``self._id.extension_names`` is processed using the
-        corresponding extractor in ``self.EXTRACTOR_MAP`` and stored as an attribute
-        of the accounts. The original aggregated extension container is then removed.
+        Each extension listed in ``self._id.extension_names`` is processed using
+        the corresponding extractor in ``self.CUSTOM_EXTRACTORS`` (on the merged
+        extension pool) or, by default, copied as-is from its raw EXIOBASE
+        satellite account, and stored as an attribute of the accounts. The
+        original aggregated extension container is then removed.
         """
         accounts = self.get_processed_data(self.KEY_PYMRIO_ACCOUNTS)
         extensions = accounts.extensions
 
-        for extension_name, extractor_cls in self.EXTRACTOR_MAP.items():
-            if extension_name in self._id.extension_names:
-                source = (
-                    self._raw_air_emissions
-                    if extension_name == cst.AIR_EMISSIONS
-                    else extensions
+        for extension_name in self._id.extension_names:
+            if extension_name in self.CUSTOM_EXTRACTORS:
+                extractor = self.CUSTOM_EXTRACTORS[extension_name](extensions)
+            else:
+                extractor = cls_extractor.PassthroughExtractor(
+                    self._raw_extensions[extension_name], extension_name
                 )
-                extractor = extractor_cls(source)
-                setattr(accounts, extension_name, extractor.extract())
+            setattr(accounts, extension_name, extractor.extract())
         accounts.remove_extension(extensions.name)
 
     def _build_detail_levels(self):

@@ -13,7 +13,20 @@ courant depuis lequel il est invoque.
 
 S'arrete au premier echec (code de sortie non nul) pour eviter d'enchainer
 des etapes sur des donnees incompletes.
+
+La version Exiobase est passee en parametre (-Version, 3.11.2 par defaut) :
+elle est transmise a run_engine_batch.ps1 (qui la reporte dans le fichier de
+settings) et aux scripts Python via la variable d'environnement
+PLANEFR_EXIOBASE_VERSION.
+    Exemple : .\run_pipeline_from_engine.ps1 -Version 3.11.2
 #>
+
+param(
+    # Version Exiobase a utiliser (ex. "3.11.2")
+    [string]$Version = "3.11.2"
+)
+
+$env:PLANEFR_EXIOBASE_VERSION = $Version
 
 $scriptsDir     = $PSScriptRoot
 $matmatAdemeDir = Split-Path -Parent $scriptsDir
@@ -35,7 +48,7 @@ function Invoke-Stage {
 }
 
 Invoke-Stage "3. engine" {
-    & (Join-Path $scriptsDir "run_engine_batch.ps1")
+    & (Join-Path $scriptsDir "run_engine_batch.ps1") -Version $Version
 }
 
 Invoke-Stage "4. extract_f_y_tot" {
@@ -63,4 +76,4 @@ Invoke-Stage "8. compute_ds_x_dom" {
     uv run python (Join-Path $scriptsDir "compute_ds_x_dom.py")
 }
 
-Write-Host "`nPipeline complet termine avec succes." -ForegroundColor Green
+Write-Host "`nPipeline complet termine avec succes (version $Version)." -ForegroundColor Green

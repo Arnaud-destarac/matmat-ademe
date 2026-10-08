@@ -1,7 +1,7 @@
 """
 Calcule dS, la variation relative de S (= F_x_dom / x) entre chaque scénario 2050
 (S1-S4, TEND) et Base_year_2015, pour les extensions manuellement choquées
-(dom_land_use, dom_biogeochemical, dom_water), à partir des chocs définis dans
+(dom_land, dom_nutrients, dom_water), à partir des chocs définis dans
 my_manual_param.xlsx.
 
 Pour un row_name et un scénario donnés :
@@ -23,7 +23,7 @@ MatMat/matmat-ademe/.../2-shocks/1-transitions_2050/<scenario>/extensions/dom_<l
 
 Les chocs "F_Y_tot" du même fichier n'ont pas de dimension sectorielle : ils sont
 appliqués directement, en place, dans
-Module_PlaneFR/data/3.10.2/<scenario>/extensions/dom_<lp>/F_Y_tot.pkl, en
+Module_PlaneFR/data/<version>/<scenario>/extensions/dom_<lp>/F_Y_tot.pkl, en
 recalculant à chaque fois new_value = valeur base_year (feuille FY_<lp> de
 S_extraction.xlsx) x (1 + choc). Partir de la valeur base_year (et non de la
 valeur déjà présente dans le F_Y_tot.pkl du scénario) rend le script idempotent
@@ -31,6 +31,7 @@ sans backup : le réexécuter ne cumule jamais le choc, même si le fichier
 scénario a été régénéré entre-temps par le modèle amont.
 """
 
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -42,7 +43,10 @@ S_EXTRACTION_FILE = MODULE_PLANEFR_DIR / "data" / "S_extraction.xlsx"
 MANUAL_PARAM_FILE = (
     MATMAT_DIR / "data" / "4-PlaneFR" / "Settings" / "a-manual_shocks" / "input" / "my_manual_param.xlsx"
 )
-SCENARIO_DATA_DIR = MODULE_PLANEFR_DIR / "data" / "3.10.2"
+# Version Exiobase (variable d'environnement PLANEFR_EXIOBASE_VERSION, positionnée
+# par run_full_pipeline.ps1 / run_pipeline_from_engine.ps1)
+EXIOBASE_VERSION = os.environ.get("PLANEFR_EXIOBASE_VERSION", "3.11.2")
+SCENARIO_DATA_DIR = MODULE_PLANEFR_DIR / "data" / EXIOBASE_VERSION
 SHOCKS_OUTPUT_DIR = MATMAT_DIR / "data" / "4-PlaneFR" / "2-shocks" / "1-transitions_2050"
 
 BASE_YEAR_NAME = "Base_year_2015"
@@ -53,7 +57,7 @@ SCENARIO_FOLDER_NAMES = {
     "S4": "S4_2050",
     "TEND": "TEND_2050",
 }
-LP_NAMES = ["land_use", "biogeochemical", "water"]  # feuilles présentes dans my_manual_param.xlsx
+LP_NAMES = ["land", "nutrients", "water"]  # feuilles présentes dans my_manual_param.xlsx
 
 
 def load_x_domestic():

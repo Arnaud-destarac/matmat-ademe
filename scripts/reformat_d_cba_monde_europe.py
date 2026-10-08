@@ -9,10 +9,10 @@ Pour chaque extension dans data/Monde/base-year_2015 et base-year_2019/extension
   (une par région listée dans detail_levels.xlsx, UE et hors UE)
 - France (FR) : cas particulier conservé tel quel -- seul F_Y_tot.pkl est exporté,
   dans dom_{ext_name}, car d_cba/F_x_dom pour la France proviennent déjà d'un autre
-  pipeline (scénarios France dom_/imp_ existants dans data/3.10.2)
+  pipeline (scénarios France dom_/imp_ existants dans data/<version>)
 
 base-year_2015 (SRC_DIR[0]) ne produit qu'une version France, copiée dans tous
-les autres dossiers de scénarios déjà présents dans data/3.10.2 (dom_{ext}) ;
+les autres dossiers de scénarios déjà présents dans data/<version> (dom_{ext}) ;
 base-year_2019 (SRC_DIR[1]) produit la version Monde, Europe, et une version par
 région Exiobase, chacune dans son dossier dédié (2019_W, 2019_EU27, 2019_<code>).
 """
@@ -31,14 +31,17 @@ SRC_DIR = [
     os.path.join(PLANEFR_DATA_DIR, "Outputs", "World", "base-year_2019", "extensions"),
 ]
 
-DATA_DIR = "C:\\Users\\Arnaud\\Documents\\CIRED\\PlaneFR\\Code\\Module_PlaneFR\\data\\3.11.2"
+# Version Exiobase (variable d'environnement PLANEFR_EXIOBASE_VERSION, positionnée
+# par run_full_pipeline.ps1 / run_pipeline_from_engine.ps1)
+EXIOBASE_VERSION = os.environ.get("PLANEFR_EXIOBASE_VERSION", "3.11.2")
+DATA_DIR = os.path.join("C:\\Users\\Arnaud\\Documents\\CIRED\\PlaneFR\\Code\\Module_PlaneFR\\data", EXIOBASE_VERSION)
 DST_MONDE = os.path.join(DATA_DIR, "2019_W", "extensions")
 DST_EUROPE = os.path.join(DATA_DIR, "2019_EU27", "extensions")
 
 # Y_categories à exclure. Ce label ("Exports: Total (fob)") est celui des données
 # BRUTES en amont (SRC_DIR) ; il ne faut pas le confondre avec le label "Exports"
 # utilisé par les notebooks d'analyse (planefr_lib.io.exclude_y_category), qui
-# lisent eux les données déjà reformatées dans data/3.10.2 — deux étages du
+# lisent eux les données déjà reformatées dans data/<version> — deux étages du
 # pipeline, deux libellés différents pour le même concept, pas une incohérence.
 YCATS_EXCLUDED = {"Exports: Total (fob)"}
 
@@ -53,7 +56,7 @@ EU_REGIONS = ALL_REGIONS[:27]
 # Une destination 2019_<code>/extensions par région Exiobase (ex. 2019_FR, 2019_DK...)
 REGION_TARGETS = [(code, os.path.join(DATA_DIR, f"2019_{code}", "extensions")) for code in ALL_REGIONS]
 
-# Découvrir dynamiquement les autres dossiers de scénarios déjà présents dans 3.10.2
+# Découvrir dynamiquement les autres dossiers de scénarios déjà présents dans data/<version>
 # (scénarios France 2015, ex. Tech_NZE...) en excluant nos propres dossiers de sortie.
 EXCLUDED_DIRS = {"2019_W", "2019_EU27"} | {f"2019_{code}" for code in ALL_REGIONS}
 OTHER_DIRS = [

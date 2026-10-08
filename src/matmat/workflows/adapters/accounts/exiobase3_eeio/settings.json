@@ -12,10 +12,10 @@
     "ghg_emissions",
     "energy",
     "raw_materials",
-    "labor",
-    "value_added",
+    "employment",
+    "factor_inputs",
     "water",
-    "land_use",
-    "biogeochemical"
+    "land",
+    "nutrients"
   ]
 }

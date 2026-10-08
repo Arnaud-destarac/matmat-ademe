@@ -11,13 +11,8 @@ GHG_EMISSIONS = "ghg_emissions"
 GHG_COMBUSTION = "ghg_combustion"
 GHG_OTHER = "ghg_other"
 RAW_MATERIALS = "raw_materials"
-LABOR = "labor"
-VALUE_ADDED = "value_added"
-WATER = "water"
-LAND_USE = "land_use"
-BIOGEOCHEMICAL = "biogeochemical"
-ENERGY = "energy"
-AIR_EMISSIONS = "air_emissions"
+# Other extensions keep the name of their raw EXIOBASE satellite account
+# (e.g. "land", "nutrients", "water"), see Exiobase3EEIO.
 
 # EXTENSIONS MAPPING BY CATEGORY, SUBCATEGORY AND/OR SECTOR
 RAW_MATERIAL_CATEGORY_MAPPING = {

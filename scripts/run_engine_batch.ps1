@@ -5,7 +5,15 @@ chemins dans le fichier de settings JSON avant chaque run.
 Suppose que les etapes gmrio_to_snac_s et update_calib_fr ont deja ete
 executees au prealable (cf. run_calib_fr_batch.ps1 / run_update_calib_fr_batch.ps1)
 et que leurs sorties sont disponibles.
+
+Les sorties sont ecrites dans Module_PlaneFR\data\<Version> (-Version,
+3.11.2 par defaut).
 #>
+
+param(
+    # Version Exiobase a utiliser (ex. "3.11.2")
+    [string]$Version = "3.11.2"
+)
 
 $projectDir = Split-Path -Parent $PSScriptRoot
 
@@ -14,11 +22,11 @@ $shocksDir          = Join-Path $projectDir "data\4-PlaneFR\2-shocks\1-transitio
 
 Set-Location $projectDir
 
-# Dossier de sortie de base (ex. "...\Module_PlaneFR\data\3.10.2"), capture
-# une seule fois depuis le path_out initial pour ne pas deriver d'une valeur
-# deja ecrasee par une iteration precedente.
+# Dossier de sortie de base (ex. "...\Module_PlaneFR\data\3.11.2") : dossier
+# data du path_out initial ("...\data\<version>\<scenario>"), suivi de la
+# version demandee.
 $initialSettings = Get-Content -Raw -Path $engineSettingsPath | ConvertFrom-Json
-$engineOutBaseDir = Split-Path -Parent $initialSettings.path_out
+$engineOutBaseDir = Join-Path (Split-Path -Parent (Split-Path -Parent $initialSettings.path_out)) $Version
 
 function Set-YearInPath {
     param(

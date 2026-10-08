@@ -18,7 +18,20 @@ quel que soit le repertoire courant depuis lequel il est invoque.
 
 S'arrete au premier echec (code de sortie non nul) pour eviter d'enchainer
 des etapes sur des donnees incompletes.
+
+La version Exiobase est passee en parametre (-Version, 3.11.2 par defaut) :
+elle est transmise aux scripts .ps1 de chaque etape (qui la reportent dans
+les fichiers de settings) et aux scripts Python via la variable
+d'environnement PLANEFR_EXIOBASE_VERSION.
+    Exemple : .\run_full_pipeline.ps1 -Version 3.11.2
 #>
+
+param(
+    # Version Exiobase a utiliser (ex. "3.11.2")
+    [string]$Version = "3.11.2"
+)
+
+$env:PLANEFR_EXIOBASE_VERSION = $Version
 
 $scriptsDir     = $PSScriptRoot
 $matmatAdemeDir = Split-Path -Parent $scriptsDir
@@ -40,19 +53,19 @@ function Invoke-Stage {
 }
 
 Invoke-Stage "0. exiobase3_eeio_batch" {
-    & (Join-Path $scriptsDir "run_exiobase3_eeio_batch.ps1")
+    & (Join-Path $scriptsDir "run_exiobase3_eeio_batch.ps1") -Version $Version
 }
 
 Invoke-Stage "1. gmrio_to_snac_s" {
-    & (Join-Path $scriptsDir "run_gmrio_to_snac_s_batch.ps1")
+    & (Join-Path $scriptsDir "run_gmrio_to_snac_s_batch.ps1") -Version $Version
 }
 
 Invoke-Stage "2. update_calib_fr" {
-    & (Join-Path $scriptsDir "run_update_calib_fr_batch.ps1")
+    & (Join-Path $scriptsDir "run_update_calib_fr_batch.ps1") -Version $Version
 }
 
 Invoke-Stage "3. engine" {
-    & (Join-Path $scriptsDir "run_engine_batch.ps1")
+    & (Join-Path $scriptsDir "run_engine_batch.ps1") -Version $Version
 }
 
 Invoke-Stage "4. extract_f_y_tot" {
@@ -80,4 +93,4 @@ Invoke-Stage "8. compute_ds_x_dom" {
     uv run python (Join-Path $scriptsDir "compute_ds_x_dom.py")
 }
 
-Write-Host "`nPipeline complet termine avec succes." -ForegroundColor Green
+Write-Host "`nPipeline complet termine avec succes (version $Version)." -ForegroundColor Green

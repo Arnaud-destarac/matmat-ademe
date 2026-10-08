@@ -1,6 +1,6 @@
 """
 Reformatage ponctuel des extensions France (sortie brute du pipeline CIRED/MatMat,
-dossier INPUT) vers data/3.10.2/ :
+dossier INPUT) vers data/<version>/ :
 - ghg_emissions : retire la part ghg_combustion (traitée à part ci-dessous),
   renomme le niveau d'index "gas" en "indicator".
 - ghg_combustion : effondre en une seule ligne "CO2" ; imp_ghg_combustion n'existe
@@ -17,13 +17,17 @@ dossier INPUT) vers data/3.10.2/ :
   reformatées comme celles de F_x_dom (part domestique uniquement).
 """
 
+import os
 import pickle
 from collections import defaultdict
 from pathlib import Path
 import pandas as pd
 
-INPUT = Path(r"C:\Users\Arnaud\Documents\CIRED\PlaneFR\Code\Module_PlaneFR\data\3.11.2")
-OUTPUT = Path(r"C:\Users\Arnaud\Documents\CIRED\PlaneFR\Code\Module_PlaneFR\data\3.11.2")
+# Version Exiobase (variable d'environnement PLANEFR_EXIOBASE_VERSION, positionnée
+# par run_full_pipeline.ps1 / run_pipeline_from_engine.ps1)
+EXIOBASE_VERSION = os.environ.get("PLANEFR_EXIOBASE_VERSION", "3.11.2")
+INPUT = Path(r"C:\Users\Arnaud\Documents\CIRED\PlaneFR\Code\Module_PlaneFR\data") / EXIOBASE_VERSION
+OUTPUT = INPUT
 
 
 def collapse_to_single_row(df, label):

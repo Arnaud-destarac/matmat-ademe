@@ -8,7 +8,9 @@ system using `pymrio`.
 Core features
 *************
 - Generic `ExtensionExtractor` class for filtering and reindexing
-- Specialized extractors for raw materials, labor, land use, water, GHGs, etc.
+- Specialized extractors for GHGs and raw materials (filtered on the merged
+  extension pool)
+- Pass-through extractor returning any raw EXIOBASE satellite account as-is
 - Modular mapping and aggregation tools for categorical remapping
 
 Contents
@@ -16,11 +18,7 @@ Contents
 - ExtensionExtractor
 - GreenhouseGasEmissionsExtractor
 - RawMaterialsExtractor
-- LabourExtractor
-- ValueAddedExtractor
-- WaterExtractor
-- LandUseExtractor
-- Deforestation Extractor
+- PassthroughExtractor
 
 # Todo: add to md file description on how to add new extension from exiobase.
 
@@ -393,35 +391,6 @@ class GreenhouseGasEmissionsExtractor(ExtensionExtractor):
         return extension_output
 
 
-class EnergyExtractor(ExtensionExtractor):
-    """
-    Extract energy-related data from EXIOBASE satellite extensions.
-
-    This extractor isolates all rows whose stressor label contains 'Energy',
-    and returns them as a standalone `pymrio.Extension`.
-    """
-
-    KEY_ENERGY = "Energy"
-
-    def extract(self) -> pymrio.Extension:
-        """
-        Extract employment (labour) extension.
-
-        Returns
-        -------
-        pymrio.Extension
-            Labour-related extension with employment values.
-        """
-        is_energy = self._extensions.F.index.str.contains(
-            self.KEY_ENERGY, regex=False, case=False
-        )
-
-        return self.extract_based_on_bool_index(
-            index=is_energy,
-            extension_in=self._extensions,
-            extension_name=cst.ENERGY,
-        )
-
 class RawMaterialsExtractor(ExtensionExtractor):
     """
     Extract and process raw material extraction data from an EXIOBASE MRIO system.
@@ -503,224 +472,24 @@ class RawMaterialsExtractor(ExtensionExtractor):
         return extension_out
 
 
-class LabourExtractor(ExtensionExtractor):
+class PassthroughExtractor(ExtensionExtractor):
     """
-    Extract employment-related data from EXIOBASE satellite extensions.
-
-    This extractor isolates all rows whose stressor label starts with 'Employment',
-    and returns them as a standalone `pymrio.Extension`.
-    """
-
-    KEY_EMPLOYMENT = "Employment"
-
-    def extract(self) -> pymrio.Extension:
-        """
-        Extract employment (labour) extension.
-
-        Returns
-        -------
-        pymrio.Extension
-            Labour-related extension with employment values.
-        """
-        is_employment = self._extensions.F.index.str.contains(
-            self.KEY_EMPLOYMENT, regex=False, case=False
-        )
-
-        return self.extract_based_on_bool_index(
-            index=is_employment,
-            extension_in=self._extensions,
-            extension_name=cst.LABOR,
-        )
-
-
-class ValueAddedExtractor(ExtensionExtractor):
-    """
-    Extract value added components from EXIOBASE satellite extensions.
-
-    This extractor selects rows corresponding to value added elements
-    (e.g. compensation of employees, gross operating surplus, taxes).
-    """
-    KEYS_VALUE_ADDED = [
-        "value added",
-        "taxes",
-        "compensation",
-        "operating surplus"
-    ]
-    KEY_VALUE_ADDED_UNIT = "M.EUR"
-
-    def extract(self) -> pymrio.Extension:
-        """
-        Extract value added extension.
-
-        Returns
-        -------
-        pymrio.Extension
-            Extension containing value added components.
-        """
-        # extension_out = self.extract_by_unit_value(
-        #     extension_in=self._extensions,
-        #     extension_name=cst.VALUE_ADDED,
-        #     target_unit=self.KEY_VALUE_ADDED_UNIT
-        # )
-        is_value_added = self._extensions.F.index.str.contains(
-            "|".join(self.KEYS_VALUE_ADDED),
-            case=False,
-            regex=True,
-        )
-        return self.extract_based_on_bool_index(
-            index=is_value_added,
-            extension_in=self._extensions,
-            extension_name=cst.VALUE_ADDED,
-        )
-
-class WaterExtractor(ExtensionExtractor):
-    """
-    Extract water-related environmental flows from EXIOBASE MRIO extensions.
-
-    This extractor filters all rows whose stressor name starts with "Water",
-    from the appropriate extension depending on the EXIOBASE version.
-    """
-    KEY_WATER =  "Water Consumption Blue"
-    KEY_WATER_UNIT = "Mm3"
-
-    def extract(self, aggregate: bool = False) -> pymrio.Extension:
-
-        extension_out = self._extract_water()
-
-        # # reindex extension using " - " as a sep
-        # index = getattr(extension_out, cst.UNIT).index
-        # index = index.str.split(" - ", expand=True)
-        #
-        # for elt in ExtensionExtractor.VAR_LIST_NAMES:
-        #     df = getattr(extension_out, elt)
-        #     df.index = index
-        #
-        # if aggregate:
-        #     extension = self.aggregate_by_top_level(extension_out, 0)
-
-        return extension_out
-
-    def _extract_water(self) -> pymrio.Extension:
-        """
-        Extract water stressor extension from EXIOBASE.
-
-        Returns
-        -------
-        pymrio.Extension
-            Water-related environmental extension.
-        """
-        # extension_out = self.extract_by_unit_value(
-        #     extension_in=self._extensions,
-        #     extension_name=cst.WATER,
-        #     target_unit=self.KEY_WATER_UNIT
-        # )
-        is_water = self._extensions.F.index.str.contains(
-            self.KEY_WATER, regex=False
-        )
-        return self.extract_based_on_bool_index(
-            index=is_water,
-            extension_in=self._extensions,
-            extension_name=cst.WATER
-        )
-
-
-class LandUseExtractor(ExtensionExtractor):
-    """
-    Extract land use data from the EXIOBASE MRIO system.
-
-    This extractor filters rows in the environmental extension
-    where the unit is equal to "km2", which corresponds to land use flows.
-    """
-    KEY_LAND_USE_UNIT = "km2"
-
-    def extract(self, aggregate=True) -> pymrio.Extension:
-        """
-        Extract the land use extension (unit = 'km2').
-
-        Returns
-        -------
-        pymrio.Extension
-            Extension containing land use flows.
-        """
-        extension_out = self.extract_by_unit_value(
-            extension_in=self._extensions,
-            extension_name=cst.LAND_USE,
-            target_unit=self.KEY_LAND_USE_UNIT,
-        )
-
-        # # reindex extension using " - " as a sep
-        # index = getattr(extension_out, cst.UNIT).index
-        # index = index.str.split(" - ", expand=True)
-        #
-        # # replace "Perm. meadows &" by "Permanent" in index
-        # if self._version in ["3.9.4", "3.9.5"]:
-        #     index = pd.MultiIndex.from_arrays(
-        #         [
-        #             index.get_level_values(0).str.replace(
-        #                 "Perm. meadows &", "Permanent"
-        #             ),
-        #             index.get_level_values(1),
-        #             index.get_level_values(2),
-        #         ],
-        #         names=index.names,
-        #     )
-        #
-        # for elt in ExtensionExtractor.VAR_LIST_NAMES:
-        #     df = getattr(extension_out, elt)
-        #     df.index = index
-        #
-        # if aggregate:
-        #     extension_out = self.aggregate_by_top_level(extension_out, 0)
-
-        return extension_out
-
-class BiogeochemicalExtractor(ExtensionExtractor):
-    """
-    Extract biogeochemical-related data from EXIOBASE satellite extensions.
-
-    This extractor isolates all rows whose stressor label starts with on of the
-    chemicals specify in KEYS_BIOGEOCHEMICAL
-    and returns them as a standalone `pymrio.Extension`.
-    """
-    KEYS_BIOGEOCHEMICAL = ["N", "NH3", "P", "N2O - agriculture", "Pxx", "NOX"]
-
-    def extract(self) -> pymrio.Extension:
-        prefixes = tuple(f"{k} - " for k in self.KEYS_BIOGEOCHEMICAL)
-
-        is_biogeochemical = self._extensions.F.index.str.startswith(prefixes)
-
-        return self.extract_based_on_bool_index(
-            index=is_biogeochemical,
-            extension_in=self._extensions,
-            extension_name=cst.BIOGEOCHEMICAL,
-        )
-
-class AirEmissionsExtractor(ExtensionExtractor):
-    """
-    Extract air emissions data from the raw EXIOBASE 'air_emissions' satellite
-    account.
+    Extract a raw EXIOBASE satellite account as-is.
 
     Unlike the other extractors here, this one does not re-filter stressors out
-    of the merged extension pool by substance name: it receives the original,
-    unmerged 'air_emissions' extension (captured before concatenation in
-    Exiobase3EEIO._concat_extension_in_pymrio_format) and returns it as-is, so
-    every stressor EXIOBASE classifies as an air emission is included. Some of
-    these stressors (e.g. CO2, CH4, N2O, SF6, HFC, PFC) also appear in
-    ghg_emissions / biogeochemical, since those extractors are built from
-    substance-name filters on the same underlying data.
+    of the merged extension pool: it receives the original, unmerged EXIOBASE
+    satellite account (captured before concatenation in
+    Exiobase3EEIO._concat_extension_in_pymrio_format) and returns it unchanged,
+    only renamed to the MatMat extension name. Some stressors may therefore
+    also appear in ghg_emissions / raw_materials, since those extractors are
+    built from filters on the same underlying data.
     """
-   
-    def extract(self) -> pymrio.Extension:
-        extension_out = copy.deepcopy(self._extensions)
-        extension_out.name = cst.AIR_EMISSIONS
-        return extension_out
 
-class DeforestationExtractor(ExtensionExtractor):
-    """
-    Extract deforestation-related data from EXIOBASE satellite extensions.
-    """
+    def __init__(self, extensions: pymrio.Extension, extension_name: str):
+        super().__init__(extensions)
+        self._extension_name = extension_name
 
     def extract(self) -> pymrio.Extension:
         extension_out = copy.deepcopy(self._extensions)
-        extension_out.name = cst.DEFORESTATION
+        extension_out.name = self._extension_name
         return extension_out

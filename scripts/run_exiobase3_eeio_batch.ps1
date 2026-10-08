@@ -1,13 +1,20 @@
 <#
 Lance plusieurs fois la commande exiobase3_eeio en faisant varier
 base_year et version dans le fichier de settings JSON.
+
+La version Exiobase est passee en parametre (-Version, 3.11.2 par defaut).
 #>
+
+param(
+    # Version Exiobase a utiliser (ex. "3.11.2")
+    [string]$Version = "3.11.2"
+)
 
 $projectDir   = Split-Path -Parent $PSScriptRoot
 $settingsPath = Join-Path $projectDir "data\4-PlaneFR\Settings\1-exiobase3_eeio\exiobase3_eeio_settings.json"
 
 $baseYears = 2015, 2019
-$versions  = "3.11.2"
+$versions  = $Version
 
 Set-Location $projectDir
 
@@ -43,10 +50,10 @@ foreach ($baseYear in $baseYears) {
 
 # à insérer si besoin
 
-# Lance le moteur eeio (uniquement pour la version 3.11.2), en adaptant
+# Lance le moteur eeio (pour la version $Version), en adaptant
 # path_in et path_out a chaque base_year dans settings_engine_World.json.
 $engineSettingsPath = Join-Path $projectDir "data\4-PlaneFR\Settings\4-engine\settings_engine_World.json"
-$engineVersion = "3.11.2"
+$engineVersion = $Version
 
 function Set-EngineJsonValueAndSave {
     param(

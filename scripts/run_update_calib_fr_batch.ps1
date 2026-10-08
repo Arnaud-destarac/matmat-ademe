@@ -10,7 +10,16 @@ n'existe que dans l'ancien wheel installe pour le projet datapack
 (matmat==0.9.0b0). Ce script edite donc le fichier de settings situe dans
 matmat-ademe, mais lance la commande depuis le dossier datapack (frere de
 matmat-ademe), pour utiliser son environnement/CLI.
+
+La version Exiobase (-Version, 3.11.2 par defaut) est reportee dans le chemin
+newer_accounts (sortie gmrio_to_snac_s) ; older_accounts (comptes France de
+reference) n'est pas modifie.
 #>
+
+param(
+    # Version Exiobase a utiliser (ex. "3.11.2")
+    [string]$Version = "3.11.2"
+)
 
 # Chemins calcules relativement a l'emplacement de ce script, pour que le
 # script fonctionne quel que soit le repertoire courant depuis lequel il est
@@ -33,6 +42,16 @@ function Set-YearInPath {
     return [regex]::Replace($Path, "_20\d{2}(?!.*_20\d{2})", "_$Year")
 }
 
+function Set-VersionInPath {
+    param(
+        [string]$Path,
+        [string]$Version
+    )
+    # Remplace toute occurrence d'un numero de version Exiobase (ex. 3.10.2)
+    # par la version demandee, en conservant le reste du chemin inchange.
+    return [regex]::Replace($Path, "\d+\.\d+\.\d+", $Version)
+}
+
 function Set-UpdateCalibFrSettings {
     param(
         [int]$Year
@@ -41,6 +60,7 @@ function Set-UpdateCalibFrSettings {
     $settings = Get-Content -Raw -Path $calibSettingsPath | ConvertFrom-Json
 
     $settings.path_in.newer_accounts = Set-YearInPath -Path $settings.path_in.newer_accounts -Year $Year
+    $settings.path_in.newer_accounts = Set-VersionInPath -Path $settings.path_in.newer_accounts -Version $Version
     $settings.path_in.older_accounts = Set-YearInPath -Path $settings.path_in.older_accounts -Year $Year
     $settings.path_out                = Set-YearInPath -Path $settings.path_out -Year $Year
 
