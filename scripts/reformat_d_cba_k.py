@@ -1,6 +1,11 @@
 """
 Reformatage ponctuel des extensions France (sortie brute du pipeline CIRED/MatMat,
-dossier INPUT) vers data/<version>/ :
+dossier INPUT) vers data/<version>/. Les fichiers sont recherchés dans chaque
+dossier extensions/ (find_files), donc tous les scénarios sont traités, qu'ils soient directement sous
+data/<version>/<scénario> ou imbriqués par SSP (data/<version>/<SSP>/<scénario>,
+ex. no_SSP/S1_2050, SSP1_2050/TEND_2050). Chaque étape est idempotente : un
+fichier déjà reformaté est réécrit à l'identique. Traitements :
+
 - ghg_emissions : retire la part ghg_combustion (traitée à part ci-dessous),
   renomme le niveau d'index "gas" en "indicator".
 - ghg_combustion : effondre en une seule ligne "CO2" ; imp_ghg_combustion n'existe
@@ -28,6 +33,17 @@ import pandas as pd
 EXIOBASE_VERSION = os.environ.get("PLANEFR_EXIOBASE_VERSION", "3.11.2")
 INPUT = Path(r"C:\Users\Arnaud\Documents\CIRED\PlaneFR\Code\Module_PlaneFR\data") / EXIOBASE_VERSION
 OUTPUT = INPUT
+
+# Dossiers extensions/ de tous les scénarios, listés une seule fois : un rglob sur
+# tout INPUT par motif de fichier reparcourait l'arborescence complète à chaque
+# appel (très lent).
+EXTENSION_DIRS = sorted([*INPUT.glob("*/extensions"), *INPUT.glob("*/*/extensions")])
+
+
+def find_files(pattern):
+    """Fichiers correspondant à `pattern` (ex. "dom_ghg_emissions/d_cba.pkl",
+    "*raw_materials/M.pkl") dans chacun des dossiers EXTENSION_DIRS."""
+    return [p for ext_dir in EXTENSION_DIRS for p in ext_dir.glob(pattern)]
 
 
 def collapse_to_single_row(df, label):
@@ -71,8 +87,8 @@ def compute_f_x_dom_from_f_y_f_z(extension_name, label, keep_detail=False):
     et ajoute une ligne `label` = somme (raw_materials : "RMC")."""
     paths_by_scenario = defaultdict(list)
     for in_path in sorted([
-        *INPUT.rglob(f"dom_{extension_name}/F_Y.pkl"),
-        *INPUT.rglob(f"dom_{extension_name}/F_Z.pkl"),
+        *find_files(f"dom_{extension_name}/F_Y.pkl"),
+        *find_files(f"dom_{extension_name}/F_Z.pkl"),
     ]):
         paths_by_scenario[in_path.parent.parent].append(in_path)
 
@@ -107,8 +123,8 @@ def reformat_s_like_f_x_dom(extension_name, label, keep_detail=False):
     (ghg_combustion : "CO2"), soit une ligne par matière première + une ligne
     `label` = somme (raw_materials : "RMC"). Les colonnes sont conservées."""
     for in_path in sorted([
-        *INPUT.rglob(f"dom_{extension_name}/S_Y.pkl"),
-        *INPUT.rglob(f"dom_{extension_name}/S_Z.pkl"),
+        *find_files(f"dom_{extension_name}/S_Y.pkl"),
+        *find_files(f"dom_{extension_name}/S_Z.pkl"),
     ]):
         with open(in_path, "rb") as f:
             df = pickle.load(f)
@@ -127,12 +143,12 @@ def reformat_s_like_f_x_dom(extension_name, label, keep_detail=False):
 
 # --- 1a. dom_ghg_emissions : drop ghg_combustion, droplevel source, rename gas -> indicator ---
 for in_path in sorted([
-    *INPUT.rglob("dom_ghg_emissions/d_cba_k.pkl"),
-    *INPUT.rglob("dom_ghg_emissions/d_cba.pkl"),
-    *INPUT.rglob("dom_ghg_emissions/F_x_dom.pkl"),
-    *INPUT.rglob("dom_ghg_emissions/M.pkl"),
-    *INPUT.rglob("dom_ghg_emissions/M_k.pkl"),
-    *INPUT.rglob("dom_ghg_emissions/S_x_dom.pkl"),
+    *find_files("dom_ghg_emissions/d_cba_k.pkl"),
+    *find_files("dom_ghg_emissions/d_cba.pkl"),
+    *find_files("dom_ghg_emissions/F_x_dom.pkl"),
+    *find_files("dom_ghg_emissions/M.pkl"),
+    *find_files("dom_ghg_emissions/M_k.pkl"),
+    *find_files("dom_ghg_emissions/S_x_dom.pkl"),
 ]):
     with open(in_path, "rb") as f:
         df = pickle.load(f)
@@ -146,11 +162,11 @@ for in_path in sorted([
 
 # --- 1b. imp_ghg_emissions : sum sources by gas, rename gas -> indicator ---
 for in_path in sorted([
-    *INPUT.rglob("imp_ghg_emissions/d_cba_k.pkl"),
-    *INPUT.rglob("imp_ghg_emissions/d_cba.pkl"),
-    *INPUT.rglob("imp_ghg_emissions/M.pkl"),
-    *INPUT.rglob("imp_ghg_emissions/M_k.pkl"),
-    *INPUT.rglob("imp_ghg_emissions/M_RoW.pkl"),
+    *find_files("imp_ghg_emissions/d_cba_k.pkl"),
+    *find_files("imp_ghg_emissions/d_cba.pkl"),
+    *find_files("imp_ghg_emissions/M.pkl"),
+    *find_files("imp_ghg_emissions/M_k.pkl"),
+    *find_files("imp_ghg_emissions/M_RoW.pkl"),
 ]):
     with open(in_path, "rb") as f:
         df = pickle.load(f)
@@ -163,10 +179,10 @@ for in_path in sorted([
 
 # --- 2. dom_ghg_combustion : sum -> "CO2", create imp_ghg_combustion with zeros ---
 for in_path in sorted([
-    *INPUT.rglob("dom_ghg_combustion/d_cba_k.pkl"),
-    *INPUT.rglob("dom_ghg_combustion/d_cba.pkl"),
-    *INPUT.rglob("dom_ghg_combustion/M.pkl"),
-    *INPUT.rglob("dom_ghg_combustion/M_k.pkl"),
+    *find_files("dom_ghg_combustion/d_cba_k.pkl"),
+    *find_files("dom_ghg_combustion/d_cba.pkl"),
+    *find_files("dom_ghg_combustion/M.pkl"),
+    *find_files("dom_ghg_combustion/M_k.pkl"),
 ]):
     with open(in_path, "rb") as f:
         df = pickle.load(f)
@@ -185,11 +201,11 @@ reformat_s_like_f_x_dom("ghg_combustion", "CO2")
 
 # --- 3. *_raw_materials : conserve toutes les lignes, ajoute "RMC" = somme ---
 for in_path in sorted([
-    *INPUT.rglob("*raw_materials/d_cba_k.pkl"),
-    *INPUT.rglob("*raw_materials/d_cba.pkl"),
-    *INPUT.rglob("*raw_materials/M.pkl"),
-    *INPUT.rglob("*raw_materials/M_k.pkl"),
-    *INPUT.rglob("imp_raw_materials/M_RoW.pkl"),
+    *find_files("*raw_materials/d_cba_k.pkl"),
+    *find_files("*raw_materials/d_cba.pkl"),
+    *find_files("*raw_materials/M.pkl"),
+    *find_files("*raw_materials/M_k.pkl"),
+    *find_files("imp_raw_materials/M_RoW.pkl"),
 ]):
     with open(in_path, "rb") as f:
         df = pickle.load(f)

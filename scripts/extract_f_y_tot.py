@@ -158,7 +158,7 @@ def send_f_y_tot_to_world_outputs(
         ext_dir = os.path.join(
             config.DATA_DIR,
             WORLD_PATH_OUT,
-            f"base-year_{base_year}",
+            f"Base_year_{base_year}",
             "extensions",
             extension_name,
         )

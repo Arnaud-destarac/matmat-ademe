@@ -1,8 +1,8 @@
 """
 Calcule dS, la variation relative de S (= F_x_dom / x) entre chaque scénario 2050
 (S1-S4, TEND) et Base_year_2015, pour les extensions manuellement choquées
-(dom_land, dom_nutrients, dom_water), à partir des chocs définis dans
-my_manual_param.xlsx.
+(toutes les feuilles dom_<lp> de my_manual_param.xlsx), à partir des chocs
+définis dans ce fichier.
 
 Pour un row_name et un scénario donnés :
     F_x_dom_2050 = F_x_dom_base_year * (1 + choc)   (choc appliqué à tous les secteurs)
@@ -57,7 +57,12 @@ SCENARIO_FOLDER_NAMES = {
     "S4": "S4_2050",
     "TEND": "TEND_2050",
 }
-LP_NAMES = ["land", "nutrients", "water"]  # feuilles présentes dans my_manual_param.xlsx
+
+
+def get_manual_lp_names():
+    """Sous-processus (lp) ayant une feuille dom_<lp> dans my_manual_param.xlsx."""
+    sheet_names = pd.ExcelFile(MANUAL_PARAM_FILE).sheet_names
+    return [name[len("dom_"):] for name in sheet_names if name.startswith("dom_")]
 
 
 def load_x_domestic():
@@ -195,7 +200,7 @@ def apply_f_y_tot_shocks(lp_name):
 def main():
     x_dom = load_x_domestic()
 
-    for lp_name in LP_NAMES:
+    for lp_name in get_manual_lp_names():
         print(f"=== {lp_name} ===")
         ds_by_scenario = compute_ds(lp_name, x_dom)
         write_ds_outputs(lp_name, ds_by_scenario)

@@ -11,6 +11,10 @@ tournent depuis matmat-ademe. Les chemins sont calcules relativement a
 l'emplacement de ce script, pour fonctionner quel que soit le repertoire
 courant depuis lequel il est invoque.
 
+Les etapes 5 (ajout de F_Y_tot France) et 6 traitent tous les scenarios de Module_PlaneFR/data/<version>,
+qu'ils soient directement sous data/<version>/<scenario> ou imbriques par SSP
+(data/<version>/<SSP>/<scenario>, ex. no_SSP/S1_2050, SSP1_2050/TEND_2050).
+
 S'arrete au premier echec (code de sortie non nul) pour eviter d'enchainer
 des etapes sur des donnees incompletes.
 

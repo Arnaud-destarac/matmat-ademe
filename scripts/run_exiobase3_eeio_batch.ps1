@@ -62,7 +62,7 @@ function Set-EngineJsonValueAndSave {
 
     $settings = Get-Content -Raw -Path $engineSettingsPath | ConvertFrom-Json
     $settings.path_in.accounts = ".\4-PlaneFR\1-accounts\Exiobase\${engineVersion}_${BaseYear}\${engineVersion}_pxp_${BaseYear}"
-    $settings.path_out          = ".\4-PlaneFR\Outputs\World\base-year_${BaseYear}"
+    $settings.path_out          = ".\4-PlaneFR\Outputs\World\Base_year_${BaseYear}"
 
     $json = $settings | ConvertTo-Json -Depth 10
     [System.IO.File]::WriteAllText($engineSettingsPath, $json, (New-Object System.Text.UTF8Encoding($false)))

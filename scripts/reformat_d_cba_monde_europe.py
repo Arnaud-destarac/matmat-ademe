@@ -1,5 +1,5 @@
 """
-Pour chaque extension dans data/Monde/base-year_2015 et base-year_2019/extensions :
+Pour chaque extension dans Outputs/World/Base_year_2015 et Base_year_2019/extensions :
 - transforme d_cba.pkl / F_x_dom.pkl / F_Y_tot.pkl en versions Monde, Europe et une par région Exiobase
 - Monde  : supprime les Y_category indésirables, somme tout -> (region="World", Y_category="all", sector="all")
 - Europe : idem mais en ne gardant que les 27 premières régions -> (region="Europe", ...)
@@ -11,9 +11,11 @@ Pour chaque extension dans data/Monde/base-year_2015 et base-year_2019/extension
   dans dom_{ext_name}, car d_cba/F_x_dom pour la France proviennent déjà d'un autre
   pipeline (scénarios France dom_/imp_ existants dans data/<version>)
 
-base-year_2015 (SRC_DIR[0]) ne produit qu'une version France, copiée dans tous
-les autres dossiers de scénarios déjà présents dans data/<version> (dom_{ext}) ;
-base-year_2019 (SRC_DIR[1]) produit la version Monde, Europe, et une version par
+Base_year_2015 (SRC_DIR[0]) ne produit qu'une version France, copiée dans tous
+les autres dossiers de scénarios déjà présents dans data/<version> (dom_{ext}),
+y compris les scénarios imbriqués par SSP (data/<version>/<SSP>/<scénario>, ex.
+no_SSP/S1_2050, SSP1_2050/TEND_2050) ;
+Base_year_2019 (SRC_DIR[1]) produit la version Monde, Europe, et une version par
 région Exiobase, chacune dans son dossier dédié (2019_W, 2019_EU27, 2019_<code>).
 """
 
@@ -27,8 +29,8 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PLANEFR_DATA_DIR = os.path.join(SCRIPT_DIR, "..", "data", "4-PlaneFR")
 
 SRC_DIR = [
-    os.path.join(PLANEFR_DATA_DIR, "Outputs", "World", "base-year_2015", "extensions"),
-    os.path.join(PLANEFR_DATA_DIR, "Outputs", "World", "base-year_2019", "extensions"),
+    os.path.join(PLANEFR_DATA_DIR, "Outputs", "World", "Base_year_2015", "extensions"),
+    os.path.join(PLANEFR_DATA_DIR, "Outputs", "World", "Base_year_2019", "extensions"),
 ]
 
 # Version Exiobase (variable d'environnement PLANEFR_EXIOBASE_VERSION, positionnée
@@ -47,7 +49,7 @@ YCATS_EXCLUDED = {"Exports: Total (fob)"}
 
 # Liste de toutes les régions Exiobase (UE puis hors UE / agrégats "Rest of World")
 # issue du fichier de référence ; les 27 premières sont les régions européennes (UE).
-DETAIL_LEVELS_PATH = os.path.join(PLANEFR_DATA_DIR, "Outputs", "World", "base-year_2019", "system", "detail_levels.xlsx")
+DETAIL_LEVELS_PATH = os.path.join(PLANEFR_DATA_DIR, "Outputs", "World", "Base_year_2019", "system", "detail_levels.xlsx")
 with open(DETAIL_LEVELS_PATH, "rb") as f:
     _regions_df = pd.read_excel(f, sheet_name="regions")
 ALL_REGIONS = _regions_df["region"].astype(str).to_list()
@@ -58,12 +60,30 @@ REGION_TARGETS = [(code, os.path.join(DATA_DIR, f"2019_{code}", "extensions")) f
 
 # Découvrir dynamiquement les autres dossiers de scénarios déjà présents dans data/<version>
 # (scénarios France 2015, ex. Tech_NZE...) en excluant nos propres dossiers de sortie.
+# Deux arborescences coexistent :
+# - data/<version>/<scénario>/extensions         (ex. TEND_2050, Base_year_2015)
+# - data/<version>/<SSP>/<scénario>/extensions   (ex. no_SSP/S1_2050, SSP1_2050/TEND_2050)
 EXCLUDED_DIRS = {"2019_W", "2019_EU27"} | {f"2019_{code}" for code in ALL_REGIONS}
-OTHER_DIRS = [
-    os.path.join(DATA_DIR, d, "extensions")
-    for d in os.listdir(DATA_DIR)
-    if os.path.isdir(os.path.join(DATA_DIR, d, "extensions")) and d not in EXCLUDED_DIRS
-]
+
+
+def _find_scenario_extension_dirs(data_dir: str) -> list[str]:
+    """Liste les dossiers <scénario>/extensions et <SSP>/<scénario>/extensions
+    de data_dir, hors dossiers de sortie de ce script (EXCLUDED_DIRS)."""
+    found = []
+    for d in sorted(os.listdir(data_dir)):
+        top = os.path.join(data_dir, d)
+        if d in EXCLUDED_DIRS or not os.path.isdir(top):
+            continue
+        if os.path.isdir(os.path.join(top, "extensions")):
+            found.append(os.path.join(top, "extensions"))
+            continue
+        for sub in sorted(os.listdir(top)):
+            if os.path.isdir(os.path.join(top, sub, "extensions")):
+                found.append(os.path.join(top, sub, "extensions"))
+    return found
+
+
+OTHER_DIRS = _find_scenario_extension_dirs(DATA_DIR)
 
 
 def transform(df: pd.DataFrame, mode: str) -> pd.DataFrame:
@@ -137,7 +157,7 @@ def process_extension(ext_name: str, src_dir: str):
         filename = os.path.basename(src_pkl)
 
         if src_dir == SRC_DIR[0]:
-            # base-year_2015 : une seule version France, dupliquée dans chaque
+            # Base_year_2015 : une seule version France, dupliquée dans chaque
             # dossier de scénario déjà présent (ils partagent tous le même base year).
             # Ne s'applique que pour F_Y_tot.pkl (srcs_pkl[2]).
             if filename != "F_Y_tot.pkl" or (ext_name == "ghg_emissions" or ext_name == "raw_materials"):

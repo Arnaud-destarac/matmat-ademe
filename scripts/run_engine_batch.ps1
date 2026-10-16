@@ -1,13 +1,18 @@
 <#
-Enchaine l'etape engine (baseline + un run par scenario) en adaptant les
-chemins dans le fichier de settings JSON avant chaque run.
+Enchaine l'etape engine (baseline + un run par couple accounts/scenario) en
+adaptant les chemins dans le fichier de settings JSON avant chaque run.
 
 Suppose que les etapes gmrio_to_snac_s et update_calib_fr ont deja ete
-executees au prealable (cf. run_calib_fr_batch.ps1 / run_update_calib_fr_batch.ps1)
-et que leurs sorties sont disponibles.
+executees au prealable (cf. run_calib_fr_batch.ps1 / run_update_calib_fr_batch.ps1
+/ run_update_calib_fr_batch_SSPs.ps1) et que leurs sorties sont disponibles.
 
-Les sorties sont ecrites dans Module_PlaneFR\data\<Version> (-Version,
-3.11.2 par defaut).
+Les runs de scenario iterent sur chaque dossier d'accounts present dans
+data\4-PlaneFR\Outputs\France (hors dossiers contenant "2019") et sur chaque
+scenario de data\4-PlaneFR\2-shocks\1-transitions_2050. Les sorties sont
+ecrites dans Module_PlaneFR\data\<Version>\<groupe>\<scenario> (-Version,
+3.11.2 par defaut), avec <groupe> = "no_SSP" pour les accounts
+Base_year_2015, et le nom du dossier d'accounts sinon (ex. "SSP2_2050").
+Les baselines restent ecrites dans Module_PlaneFR\data\<Version>.
 #>
 
 param(
@@ -28,15 +33,12 @@ Set-Location $projectDir
 $initialSettings = Get-Content -Raw -Path $engineSettingsPath | ConvertFrom-Json
 $engineOutBaseDir = Join-Path (Split-Path -Parent (Split-Path -Parent $initialSettings.path_out)) $Version
 
-function Set-YearInPath {
-    param(
-        [string]$Path,
-        [int]$Year
-    )
-    # Remplace la derniere occurrence "_20xx" (annee) par "_$Year", en
-    # conservant le reste du chemin (version, sous-dossiers) inchange.
-    return [regex]::Replace($Path, "_20\d{2}(?!.*_20\d{2})", "_$Year")
-}
+# Dossier contenant les accounts France (ex. ".\4-PlaneFR\Outputs\France") :
+# fixe ici plutot que deduit du JSON, dont path_in.accounts change a chaque run
+$accountsBaseDir = ".\4-PlaneFR\Outputs\France"
+
+# Dossier d'accounts dont les sorties de scenario vont dans "no_SSP"
+$noSspAccountsName = "Base_year_2015"
 
 function Set-EngineSettings {
     param(
@@ -46,9 +48,11 @@ function Set-EngineSettings {
         # ce qui casserait le test $null -eq $ScenarioName ci-dessous.
         $ScenarioName,
         # Annee de base des accounts (utilisee uniquement pour les runs
-        # baseline ; les scenarios utilisent l'annee deja presente dans le
-        # fichier de settings, Base_year_2015).
-        [int]$Year = 2015
+        # baseline).
+        [int]$Year = 2015,
+        # Nom du dossier d'accounts dans $accountsBaseDir (utilise uniquement
+        # pour les runs de scenario, ex. "Base_year_2015" ou "SSP2_2050").
+        [string]$AccountsName = $noSspAccountsName
     )
 
     $settings = Get-Content -Raw -Path $engineSettingsPath | ConvertFrom-Json
@@ -56,21 +60,25 @@ function Set-EngineSettings {
     $outBaseDir = $engineOutBaseDir
 
     if ($null -eq $ScenarioName) {
-        $settings.path_in.accounts = Set-YearInPath -Path $settings.path_in.accounts -Year $Year
+        $settings.path_in.accounts = Join-Path $accountsBaseDir "Base_year_$Year"
         $settings.path_in.shock    = $null
         if ($Year -eq 2019) {
-            $settings.path_out = Join-Path $outBaseDir "2019_France"
+            $settings.path_out = Join-Path $outBaseDir "2019_FR"
         }
         else {
             $settings.path_out = Join-Path $outBaseDir "Base_year_$Year"
         }
     }
     else {
-        # path_in.accounts fixe a Base_year_2015, quel que soit l'ordre des
-        # runs baseline precedents
-        $settings.path_in.accounts = Set-YearInPath -Path $settings.path_in.accounts -Year 2015
+        if ($AccountsName -eq $noSspAccountsName) {
+            $group = "no_SSP"
+        }
+        else {
+            $group = $AccountsName
+        }
+        $settings.path_in.accounts = Join-Path $accountsBaseDir $AccountsName
         $settings.path_in.shock    = ".\4-PlaneFR\2-shocks\1-transitions_2050\$ScenarioName"
-        $settings.path_out         = Join-Path $outBaseDir $ScenarioName
+        $settings.path_out         = Join-Path (Join-Path $outBaseDir $group) $ScenarioName
     }
 
     $json = $settings | ConvertTo-Json -Depth 10
@@ -78,11 +86,15 @@ function Set-EngineSettings {
     [System.IO.File]::WriteAllText($engineSettingsPath, $json, (New-Object System.Text.UTF8Encoding($false)))
 }
 
-# === Etape engine : baseline 2015, baseline 2019, puis un run par scenario
-# present dans data\4-PlaneFR\2-shocks\1-transitions_2050 ===
+# === Etape engine : baseline 2015, baseline 2019, puis un run par couple
+# (dossier d'accounts de data\4-PlaneFR\Outputs\France hors "2019",
+# scenario de data\4-PlaneFR\2-shocks\1-transitions_2050) ===
 
 $baselineYears = 2015, 2019
 $scenarios     = Get-ChildItem -Path $shocksDir -Directory | Select-Object -ExpandProperty Name
+$accountsNames = Get-ChildItem -Path (Join-Path $projectDir "data\$accountsBaseDir") -Directory |
+    Where-Object { $_.Name -notmatch "2019" } |
+    Select-Object -ExpandProperty Name
 
 foreach ($year in $baselineYears) {
     Write-Host "=== engine : baseline Base_year_$year ===" -ForegroundColor Cyan
@@ -96,14 +108,16 @@ foreach ($year in $baselineYears) {
     }
 }
 
-foreach ($scenario in $scenarios) {
-    Write-Host "=== engine : $scenario ===" -ForegroundColor Cyan
+foreach ($accountsName in $accountsNames) {
+    foreach ($scenario in $scenarios) {
+        Write-Host "=== engine : $accountsName / $scenario ===" -ForegroundColor Cyan
 
-    Set-EngineSettings -ScenarioName $scenario
+        Set-EngineSettings -ScenarioName $scenario -AccountsName $accountsName
 
-    uv run python -m matmat.cli -e eeio -st $engineSettingsPath --no_confirm
+        uv run python -m matmat.cli -e eeio -st $engineSettingsPath --no_confirm
 
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Echec engine pour $scenario (code $LASTEXITCODE)" -ForegroundColor Red
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Echec engine pour $accountsName / $scenario (code $LASTEXITCODE)" -ForegroundColor Red
+        }
     }
 }
