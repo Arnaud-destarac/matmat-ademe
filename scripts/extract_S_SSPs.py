@@ -4,16 +4,20 @@ Extrait, pour chaque scénario IMAGE de data/SSP/Scenarios, les facteurs F, x et
 une feuille par scénario (feuille effacée puis recréée si elle existe déjà).
 
 Pour chaque ligne de la feuille "Matching" :
-- F 2050/2020 : ratio de la variable "Numérateur F" (somme si "A + B") ;
-  lue dans Nutrients.xlsx (scénario "PB_<scénario>") pour le domaine Nutrients,
-  dans le csv du scénario sinon (ou dans Nutrients.xlsx si la variable n'existe
-  que là, ex. iNH3_volatization_* du domaine Air_emissions).
-  Si la cellule est de la forme "A / B + C" (ex. P - agriculture - soil/water) et que
-  F est négatif en 2020 ou en 2050 pour une région, l'indicateur après le "/" est
-  utilisé à la place de A pour cette région.
-- x 2050/2020 : ratio de la variable "Dénominateur x" (csv du scénario).
-- S 2050/2020 : F/x ; 1/F si le numérateur est de la forme "1 / <variable>"
-  (rendements) ; 1 si F ou x n'est pas calculable.
+- F 2050/2020 : ratio 2050/2020 de la formule "Numérateur F", évaluée séparément
+  en 2020 et en 2050. La formule combine des variables IMAGE avec les opérateurs
+  "+", "-" (ou "−"), "x", "/", des nombres et des parenthèses ; les parenthèses
+  placées après une variable sont des unités et sont ignorées, ex.
+  "iNH3_volatization_arable (kgN/an) x (1 − Land Cover|Cropland|Energy Crops / Land Cover|Cropland)".
+  "A OU B" (priorité la plus faible) vaut A, sauf si A est négatif en 2020 ou en
+  2050 pour la région, auquel cas B est utilisé (ex. P - agriculture - soil/water).
+  Chaque variable est lue dans Nutrients.xlsx (scénario "PB_<scénario>") pour le
+  domaine Nutrients, dans le csv du scénario sinon ; si elle est absente de cette
+  source, elle est lue dans l'autre (ex. iNH3_volatization_* du domaine
+  Air_emissions, Land Cover|* dans les lignes du domaine Nutrients).
+- x 2050/2020 : ratio de la formule "Dénominateur x" (csv du scénario).
+- S 2050/2020 : F/x ; 1/F si le numérateur est de la forme "1 / <formule>"
+  (rendements, F est alors le ratio de <formule>) ; 1 si F ou x n'est pas calculable.
 - Si un rendement "Yield|..." manque dans le scénario (ex. Yield|Oilcrops dans SSP1),
   la ligne reprend les variables F et x de la ligne "Cropland".
 
@@ -50,27 +54,101 @@ LABEL_COLUMNS = ["Domaine", "Extension EXIOBASE", "Secteurs EXIOBASE"]
 YEAR_BASE, YEAR_TARGET = 2020, 2050
 VALUE_COLUMNS = ["F 2050/2020", "x 2050/2020", "S 2050/2020"]
 
+# Opérateurs des formules (entourés d'espaces dans les cellules), par priorité croissante.
+OPERATOR_SYMBOLS = {"OU": "OU", "+": "+", "-": "-", "−": "-", "x": "*", "×": "*", "*": "*", "/": "/"}
+OPERATOR_PATTERN = "|".join(re.escape(op) for op in OPERATOR_SYMBOLS)
+PRECEDENCE = [("OU",), ("+", "-"), ("*", "/")]
+ARITHMETIC = {"+": np.add, "-": np.subtract, "*": np.multiply, "/": np.divide}
+EMPTY_CELLS = ("", "–", "-")
 
-def parse_variables(cell, alternative=False):
+
+def strip_units(text):
+    """Retire les parenthèses d'unité placées après une variable, ex. "A (kgN/an) x (1 − B)" -> "A x (1 − B)".
+
+    Une parenthèse est un regroupement si elle contient un opérateur ou suit un opérateur,
+    une autre parenthèse ouvrante ou le début de la cellule.
+    """
+    def replace(match):
+        prefix = text[:match.start()].rstrip()
+        is_group = (re.search(rf"\s({OPERATOR_PATTERN})\s", match.group(1))
+                    or not prefix or prefix.endswith("(")
+                    or re.search(rf"(^|\s)({OPERATOR_PATTERN})$", prefix))
+        return match.group(0) if is_group else ""
+    return re.sub(r"\s*\(([^()]*)\)", replace, text)
+
+
+def tokenize(text):
+    """Jetons ("name", texte), ("op", symbole) ou ("paren", "(" / ")")."""
+    tokens = []
+    for i, part in enumerate(re.split(rf"\s+({OPERATOR_PATTERN})\s+|([()])", text)):
+        if part is None or not part.strip():
+            continue
+        kind = ("name", "op", "paren")[i % 3]
+        tokens.append((kind, OPERATOR_SYMBOLS[part] if kind == "op" else part.strip()))
+    return tokens
+
+
+def parse_expression(tokens, pos=0, level=0):
+    """Analyse descendante : renvoie (arbre, position suivante).
+
+    Arbre : ("var", nom), ("num", valeur) ou (opérateur, gauche, droite).
+    """
+    if level == len(PRECEDENCE):
+        return parse_atom(tokens, pos)
+    left, pos = parse_expression(tokens, pos, level + 1)
+    while pos < len(tokens) and tokens[pos][0] == "op" and tokens[pos][1] in PRECEDENCE[level]:
+        right, next_pos = parse_expression(tokens, pos + 1, level + 1)
+        left, pos = (tokens[pos][1], left, right), next_pos
+    return left, pos
+
+
+def parse_atom(tokens, pos):
+    if pos >= len(tokens):
+        raise ValueError("formule incomplète")
+    kind, value = tokens[pos]
+    if (kind, value) == ("paren", "("):
+        node, pos = parse_expression(tokens, pos + 1)
+        if pos >= len(tokens) or tokens[pos] != ("paren", ")"):
+            raise ValueError("parenthèse non fermée")
+        return node, pos + 1
+    if kind == "name":
+        try:
+            return ("num", float(value)), pos + 1
+        except ValueError:
+            return ("var", value), pos + 1
+    raise ValueError(f"jeton inattendu '{value}'")
+
+
+def parse_formula(cell):
     """Analyse une cellule "Numérateur F" / "Dénominateur x".
 
-    Renvoie (liste de variables IMAGE, inverse) ; liste vide si pas de variable.
-    Ex. "A + B (Mt MS/an)" -> (["A", "B"], False) ; "1 / Yield|Cereal (t/ha)" -> (["Yield|Cereal"], True).
-    Une cellule "A (unité) / B + C" a un indicateur de repli après le "/" :
-    alternative=False renvoie A, alternative=True renvoie B + C (liste vide si absent).
+    Renvoie (arbre, inverse) ; arbre None si pas de variable.
+    Ex. "A + B (Mt MS/an)" -> (("+", A, B), False) ; "1 / Yield|Cereal (t/ha)" -> (("var", "Yield|Cereal"), True).
     """
     if pd.isna(cell):
-        return [], False
-    text = str(cell).strip()
-    inverse = text.startswith("1 /")
-    if inverse:
-        text = text[len("1 /"):].strip()
-    primary, _, fallback = text.partition(" / ")
-    text = fallback if alternative else primary
-    text = re.sub(r"\s*\([^()]*\)\s*$", "", text.strip())  # retire l'unité finale
-    if text in ("", "–", "-"):
-        return [], inverse
-    return [v.strip() for v in text.split(" + ")], inverse
+        return None, False
+    text = strip_units(str(cell).strip()).strip()
+    if text in EMPTY_CELLS:
+        return None, False
+    tokens = tokenize(text)
+    try:
+        tree, pos = parse_expression(tokens)
+        if pos != len(tokens):
+            raise ValueError(f"jeton inattendu '{tokens[pos][1]}'")
+    except ValueError as error:
+        raise ValueError(f"Formule invalide ({error}) : {cell!r}") from None
+    if tree[0] == "/" and tree[1] == ("num", 1.0):
+        return tree[2], True
+    return tree, False
+
+
+def formula_variables(tree):
+    """Variables IMAGE de la formule, dans l'ordre d'apparition."""
+    if tree is None or tree[0] == "num":
+        return []
+    if tree[0] == "var":
+        return [tree[1]]
+    return list(dict.fromkeys(formula_variables(tree[1]) + formula_variables(tree[2])))
 
 
 def load_matching():
@@ -114,52 +192,59 @@ def load_nutrients(scenario_name, gnm_map):
     return aggregate(df, gnm_map)
 
 
-def ratio(data, variables, region):
-    """Ratio 2050/2020 de la somme des variables pour une région (NaN si non calculable)."""
-    if not variables:
-        return np.nan
-    try:
-        values = data.loc[[(v, region) for v in variables]]
-    except KeyError:
-        return np.nan
-    base, target = values[YEAR_BASE].sum(min_count=len(variables)), values[YEAR_TARGET].sum(min_count=len(variables))
-    if pd.isna(base) or pd.isna(target) or base == 0:
-        return np.nan
-    return target / base
-
-
 def has_variables(data, variables):
     known = data.index.get_level_values("Variable")
     return all(v in known for v in variables)
 
 
-def f_source(row, f_vars, scenario_data, nutrients_data):
-    """Nutrients.xlsx pour le domaine Nutrients, ou si les variables n'existent que là (ex. iNH3_*)."""
+def f_sources(row, scenario_data, nutrients_data):
+    """Sources des variables de F, par ordre de préférence : Nutrients.xlsx d'abord pour le domaine Nutrients."""
     if row["Domaine"] == NUTRIENTS_DOMAIN:
-        return nutrients_data
-    if not has_variables(scenario_data, f_vars) and has_variables(nutrients_data, f_vars):
-        return nutrients_data
-    return scenario_data
+        return [nutrients_data, scenario_data]
+    return [scenario_data, nutrients_data]
 
 
-def has_negative(data, variables, region):
-    """True si la somme des variables est négative en 2020 ou en 2050 pour la région."""
-    try:
-        values = data.loc[[(v, region) for v in variables]]
-    except KeyError:
-        return False
-    return bool((values[[YEAR_BASE, YEAR_TARGET]].sum() < 0).any())
+def lookup_values(sources, variable, region):
+    """Valeurs [2020, 2050] de la variable dans la première source qui la contient (NaN sinon)."""
+    for data in sources:
+        try:
+            return data.loc[(variable, region), [YEAR_BASE, YEAR_TARGET]].to_numpy(dtype=float)
+        except KeyError:
+            continue
+    return np.full(2, np.nan)
+
+
+def evaluate(tree, sources, region):
+    """Valeurs [2020, 2050] de la formule pour une région (NaN si non calculable)."""
+    kind = tree[0]
+    if kind == "num":
+        return np.full(2, tree[1])
+    if kind == "var":
+        return lookup_values(sources, tree[1], region)
+    left = evaluate(tree[1], sources, region)
+    if kind == "OU":
+        # A négatif (2020 ou 2050) : indicateur de repli B
+        return evaluate(tree[2], sources, region) if (left < 0).any() else left
+    with np.errstate(divide="ignore", invalid="ignore"):
+        result = ARITHMETIC[kind](left, evaluate(tree[2], sources, region))
+    return np.where(np.isfinite(result), result, np.nan)
+
+
+def ratio(tree, sources, region):
+    """Ratio 2050/2020 de la formule pour une région (NaN si non calculable)."""
+    if tree is None:
+        return np.nan
+    base, target = evaluate(tree, sources, region)
+    if pd.isna(base) or pd.isna(target) or base == 0:
+        return np.nan
+    return target / base
 
 
 def compute_row(row, scenario_data, nutrients_data, region):
-    f_vars, inverse = parse_variables(row["Numérateur F"])
-    alt_vars, _ = parse_variables(row["Numérateur F"], alternative=True)
-    x_vars, _ = parse_variables(row["Dénominateur x"])
-    source = f_source(row, f_vars, scenario_data, nutrients_data)
-    if alt_vars and has_negative(source, f_vars, region):
-        f_vars = alt_vars  # F négatif (2020 ou 2050) : indicateur de repli
-    f = ratio(source, f_vars, region)
-    x = ratio(scenario_data, x_vars, region)
+    f_tree, inverse = parse_formula(row["Numérateur F"])
+    x_tree, _ = parse_formula(row["Dénominateur x"])
+    f = ratio(f_tree, f_sources(row, scenario_data, nutrients_data), region)
+    x = ratio(x_tree, [scenario_data], region)
     if inverse:
         s = 1 / f if pd.notna(f) and f != 0 else 1.0
     elif pd.notna(f) and pd.notna(x) and x != 0:
@@ -174,7 +259,8 @@ def apply_yield_fallback(matching, scenario_data, scenario_name):
     cropland = matching.loc[matching["Extension EXIOBASE"] == YIELD_FALLBACK_EXTENSION].iloc[0]
     matching = matching.copy()
     for i, row in matching.iterrows():
-        f_vars, inverse = parse_variables(row["Numérateur F"])
+        f_tree, inverse = parse_formula(row["Numérateur F"])
+        f_vars = formula_variables(f_tree)
         if inverse and not has_variables(scenario_data, f_vars):
             matching.loc[i, ["Numérateur F", "Dénominateur x"]] = cropland[["Numérateur F", "Dénominateur x"]].values
             print(f"[info] {scenario_name} : {', '.join(f_vars)} absent, "
@@ -185,13 +271,11 @@ def apply_yield_fallback(matching, scenario_data, scenario_name):
 def check_variables(matching, scenario_data, nutrients_data, scenario_name):
     """Signale les variables de la feuille Matching introuvables dans les données."""
     for _, row in matching.iterrows():
-        f_vars, _ = parse_variables(row["Numérateur F"])
-        alt_vars, _ = parse_variables(row["Numérateur F"], alternative=True)
-        x_vars, _ = parse_variables(row["Dénominateur x"])
-        f_src = f_source(row, f_vars, scenario_data, nutrients_data)
-        for vars_, source in [(f_vars, f_src), (alt_vars, f_src), (x_vars, scenario_data)]:
-            for v in vars_:
-                if not has_variables(source, [v]):
+        f_tree, _ = parse_formula(row["Numérateur F"])
+        x_tree, _ = parse_formula(row["Dénominateur x"])
+        for tree, sources in [(f_tree, f_sources(row, scenario_data, nutrients_data)), (x_tree, [scenario_data])]:
+            for v in formula_variables(tree):
+                if not any(has_variables(source, [v]) for source in sources):
                     print(f"[info] {scenario_name} : variable '{v}' introuvable ({row['Extension EXIOBASE']}).")
 
 

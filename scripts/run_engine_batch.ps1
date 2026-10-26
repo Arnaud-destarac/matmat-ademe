@@ -12,7 +12,9 @@ scenario de data\4-PlaneFR\2-shocks\1-transitions_2050. Les sorties sont
 ecrites dans Module_PlaneFR\data\<Version>\<groupe>\<scenario> (-Version,
 3.11.2 par defaut), avec <groupe> = "no_SSP" pour les accounts
 Base_year_2015, et le nom du dossier d'accounts sinon (ex. "SSP2_2050").
-Les baselines restent ecrites dans Module_PlaneFR\data\<Version>.
+La baseline Base_year_2015 est ecrite dans Module_PlaneFR\data\<Version>\no_SSP,
+puis copiee dans chaque autre groupe (SSP1_2050...) pour y servir de scenario
+de reference ; la baseline 2019 reste dans Module_PlaneFR\data\<Version>\2019_FR.
 #>
 
 param(
@@ -31,7 +33,11 @@ Set-Location $projectDir
 # data du path_out initial ("...\data\<version>\<scenario>"), suivi de la
 # version demandee.
 $initialSettings = Get-Content -Raw -Path $engineSettingsPath | ConvertFrom-Json
-$engineOutBaseDir = Join-Path (Split-Path -Parent (Split-Path -Parent $initialSettings.path_out)) $Version
+# Le path_out initial peut etre "...\data\<version>\<scenario>" ou, apres un
+# run de scenario, "...\data\<version>\<groupe>\<scenario>" : on coupe donc au
+# dossier de version plutot que de remonter d'un nombre fixe de niveaux.
+$engineOutDataDir = [regex]::Replace($initialSettings.path_out, "\\\d+\.\d+\.\d+(\\.*)?$", "")
+$engineOutBaseDir = Join-Path $engineOutDataDir $Version
 
 # Dossier contenant les accounts France (ex. ".\4-PlaneFR\Outputs\France") :
 # fixe ici plutot que deduit du JSON, dont path_in.accounts change a chaque run
@@ -39,6 +45,21 @@ $accountsBaseDir = ".\4-PlaneFR\Outputs\France"
 
 # Dossier d'accounts dont les sorties de scenario vont dans "no_SSP"
 $noSspAccountsName = "Base_year_2015"
+
+# Sortie baseline copiee dans chaque dossier de groupe (no_SSP, SSP1_2050...),
+# pour servir de scenario de reference aux figures de Module_PlaneFR
+$referenceBaselineName = "Base_year_2015"
+
+function Get-ScenarioGroup {
+    param(
+        # Nom du dossier d'accounts (ex. "Base_year_2015" ou "SSP2_2050")
+        [string]$AccountsName
+    )
+    if ($AccountsName -eq $noSspAccountsName) {
+        return "no_SSP"
+    }
+    return $AccountsName
+}
 
 function Set-EngineSettings {
     param(
@@ -65,17 +86,17 @@ function Set-EngineSettings {
         if ($Year -eq 2019) {
             $settings.path_out = Join-Path $outBaseDir "2019_FR"
         }
+        elseif ("Base_year_$Year" -eq $referenceBaselineName) {
+            # Baseline de reference : ecrite dans le groupe no_SSP, puis copiee
+            # dans les autres groupes (cf. fin de la boucle des scenarios)
+            $settings.path_out = Join-Path (Join-Path $outBaseDir (Get-ScenarioGroup -AccountsName $noSspAccountsName)) "Base_year_$Year"
+        }
         else {
             $settings.path_out = Join-Path $outBaseDir "Base_year_$Year"
         }
     }
     else {
-        if ($AccountsName -eq $noSspAccountsName) {
-            $group = "no_SSP"
-        }
-        else {
-            $group = $AccountsName
-        }
+        $group = Get-ScenarioGroup -AccountsName $AccountsName
         $settings.path_in.accounts = Join-Path $accountsBaseDir $AccountsName
         $settings.path_in.shock    = ".\4-PlaneFR\2-shocks\1-transitions_2050\$ScenarioName"
         $settings.path_out         = Join-Path (Join-Path $outBaseDir $group) $ScenarioName
@@ -120,4 +141,23 @@ foreach ($accountsName in $accountsNames) {
             Write-Host "Echec engine pour $accountsName / $scenario (code $LASTEXITCODE)" -ForegroundColor Red
         }
     }
+
+    # === Copie de la baseline de reference (ecrite dans no_SSP) dans le
+    # dossier du groupe ===
+    $group = Get-ScenarioGroup -AccountsName $accountsName
+    if ($accountsName -eq $noSspAccountsName) {
+        continue
+    }
+    $baseline  = Join-Path (Join-Path $engineOutBaseDir (Get-ScenarioGroup -AccountsName $noSspAccountsName)) $referenceBaselineName
+    $groupCopy = Join-Path (Join-Path $engineOutBaseDir $group) $referenceBaselineName
+
+    if (-not (Test-Path (Join-Path $baseline "extensions"))) {
+        Write-Host "Copie de $referenceBaselineName dans $group impossible : $baseline introuvable ou incomplet" -ForegroundColor Red
+        continue
+    }
+    Write-Host "--- $group : copie de $baseline ---" -ForegroundColor Cyan
+    if (Test-Path $groupCopy) {
+        Remove-Item -Path $groupCopy -Recurse -Force
+    }
+    Copy-Item -Path $baseline -Destination $groupCopy -Recurse
 }

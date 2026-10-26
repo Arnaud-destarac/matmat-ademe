@@ -41,12 +41,23 @@ MatMat/matmat-ademe/data/4-PlaneFR/2-shocks/3-SSPs_2050/<feuille>_2050/extension
 (dossiers créés s'ils n'existent pas), avec une copie du detail_levels.xlsx de
 l'extension dans Base_year_2019. Le dossier <feuille>_2050/system/ reçoit de
 même une copie du detail_levels.xlsx de Base_year_2019/system.
+
+Chocs sur A : une ligne dont la colonne 'Domaine' contient une flèche
+(A_SHOCK_MARKER, ex. 'Cultures → élevage') est un choc sur les coefficients
+techniques A, et non sur S. 'Extension EXIOBASE' donne alors les secteurs EXIOBASE
+en ligne de A (séparés par ';', toutes régions d'origine confondues) et
+'Secteurs EXIOBASE' les secteurs en colonne. Pour chaque colonne (region,
+sector), dA = S 2050/2020 - 1 de la région IMAGE de rattachement de la région
+de la colonne (région qui consomme l'intrant). dA a le même format que le A.pkl
+de Base_year_2019 (initialisé à 0) et est écrit en dA.pkl dans
+<feuille>_2050/system/ (pas de .xlsx : 9800 x 9800 cellules).
 """
 
 import json
 import shutil
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from compute_ds_x_dom import MATMAT_DIR, MODULE_PLANEFR_DIR, make_pickle_portable
@@ -60,6 +71,9 @@ SHOCKS_OUTPUT_DIR = MATMAT_DIR / "data" / "4-PlaneFR" / "2-shocks" / "3-SSPs_205
 
 NON_SCENARIO_SHEETS = {"Matching", "Régions", "Notes"}
 S_RATIO_LABEL = "S 2050/2020"
+
+# Marqueur, dans la colonne 'Domaine', d'un choc sur A (et non sur S)
+A_SHOCK_MARKER = "→"
 
 # Libellés du fichier de matching dont les segments ne se retrouvent pas tels
 # quels dans les indicateurs EXIOBASE : segments à rechercher à la place.
@@ -164,6 +178,48 @@ def compute_ds(shocks, s_base, region_bridge):
     return ds
 
 
+def split_sectors(value):
+    """Liste de secteurs EXIOBASE séparés par ';' (liste vide si case vide)."""
+    return [] if pd.isna(value) else [s.strip() for s in str(value).split(";") if s.strip()]
+
+
+def compute_da(shocks, a_index, a_columns, region_bridge):
+    """dA (même format que A) : pour chaque ligne de choc, cellules (secteurs de
+    'Extension EXIOBASE' toutes régions, secteurs de 'Secteurs EXIOBASE') =
+    S 2050/2020 - 1 de la région IMAGE de la région de la colonne."""
+    da = np.zeros((len(a_index), len(a_columns)))
+    row_sectors_all = a_index.get_level_values("sector")
+    col_sectors_all = a_columns.get_level_values("sector")
+    image_regions = a_columns.get_level_values("region").map(region_bridge)
+
+    for _, row in shocks.iterrows():
+        label = f"{row['domain']} : {row['row_label']} x {row['sectors']}"
+        row_sectors = split_sectors(row["row_label"])
+        col_sectors = split_sectors(row["sectors"])
+        for kind, sectors, known in (("lignes", row_sectors, row_sectors_all), ("colonnes", col_sectors, col_sectors_all)):
+            unknown = sorted(set(sectors) - set(known))
+            if unknown:
+                print(f"[warn] '{row['domain']}' : secteurs ({kind}) inconnus ignorés : {unknown}")
+        if not row_sectors or not col_sectors:
+            print(f"[skip] '{label}' : secteurs en ligne ou en colonne manquants, ignoré.")
+            continue
+
+        da_cols = np.asarray(image_regions.map(lambda r: row.get(r)), dtype=float) - 1
+        rows = np.flatnonzero(row_sectors_all.isin(row_sectors))
+        cols = np.flatnonzero(col_sectors_all.isin(col_sectors) & ~np.isnan(da_cols))
+        da[np.ix_(rows, cols)] = da_cols[cols]
+        print(f"[shock A] '{row['domain']}' -> {len(rows)} ligne(s) x {len(cols)} colonne(s)")
+
+    return pd.DataFrame(da, index=a_index, columns=a_columns)
+
+
+def write_da_outputs(sheet_name, da):
+    out_dir = SHOCKS_OUTPUT_DIR / f"{sheet_name}_2050" / "system"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    make_pickle_portable(da).to_pickle(out_dir / "dA.pkl")
+    print(f"[write] {out_dir / 'dA.pkl'}")
+
+
 def write_ds_outputs(sheet_name, ext_name, ds):
     out_dir = SHOCKS_OUTPUT_DIR / f"{sheet_name}_2050" / "extensions" / ext_name
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -202,10 +258,23 @@ def write_system_outputs(sheet_name):
 
 def main():
     region_bridge = load_region_bridge()
+    a_index = a_columns = None
 
     for sheet_name in get_scenario_sheets():
         write_system_outputs(sheet_name)
         shocks = load_scenario_shocks(sheet_name)
+
+        is_a_shock = shocks["domain"].str.contains(A_SHOCK_MARKER, regex=False)
+        a_shocks, shocks = shocks[is_a_shock], shocks[~is_a_shock]
+        if not a_shocks.empty:
+            print(f"=== {sheet_name} / A ===")
+            if a_index is None:
+                # Seuls l'index et les colonnes de A servent : chargé une fois
+                a_base = pd.read_pickle(BASE_SYSTEM_DIR / "A.pkl")
+                a_index, a_columns = a_base.index, a_base.columns
+                del a_base
+            write_da_outputs(sheet_name, compute_da(a_shocks, a_index, a_columns, region_bridge))
+
         for domain, domain_shocks in shocks.groupby("domain", sort=False):
             ext_name = str(domain).strip().lower()
             print(f"=== {sheet_name} / {ext_name} ===")
