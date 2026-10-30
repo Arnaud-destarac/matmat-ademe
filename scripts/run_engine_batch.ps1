@@ -15,17 +15,34 @@ Base_year_2015, et le nom du dossier d'accounts sinon (ex. "SSP2_2050").
 La baseline Base_year_2015 est ecrite dans Module_PlaneFR\data\<Version>\no_SSP,
 puis copiee dans chaque autre groupe (SSP1_2050...) pour y servir de scenario
 de reference ; la baseline 2019 reste dans Module_PlaneFR\data\<Version>\2019_FR.
+
+-Suffix (ex. "_agri") : lit les chocs dans 1-transitions_2050<Suffix> et les
+accounts dans Outputs\France<Suffix>, et garantit que chaque dossier de groupe
+et de scenario ecrit se termine par <Suffix>. Les accounts Base_year<Suffix>
+jouent alors le role de Base_year_2015 (groupe no_SSP<Suffix>), et la baseline
+de reference est le scenario Base_year<Suffix> de ces accounts
+(no_SSP<Suffix>\Base_year<Suffix>), copie dans chaque autre groupe. Les
+baselines 2015/2019 sans choc ne sont pas recalculees.
 #>
 
 param(
     # Version Exiobase a utiliser (ex. "3.11.2")
-    [string]$Version = "3.11.2"
+    [string]$Version = "3.11.2",
+    # Suffixe des dossiers de chocs, d'accounts et de sortie ("" par defaut, ex. "_agri")
+    [string]$Suffix = ""
 )
 
 $projectDir = Split-Path -Parent $PSScriptRoot
 
 $engineSettingsPath = Join-Path $projectDir "data\4-PlaneFR\Settings\4-engine\settings_engine_France_shocks.json"
-$shocksDir          = Join-Path $projectDir "data\4-PlaneFR\2-shocks\1-transitions_2050"
+$shocksDir          = Join-Path $projectDir "data\4-PlaneFR\2-shocks\1-transitions_2050$Suffix"
+
+function Add-Suffix {
+    param([string]$Name)
+    # Ajoute $Suffix au nom s'il ne s'y termine pas deja
+    if ($Name.EndsWith($Suffix)) { return $Name }
+    return "$Name$Suffix"
+}
 
 Set-Location $projectDir
 
@@ -41,14 +58,16 @@ $engineOutBaseDir = Join-Path $engineOutDataDir $Version
 
 # Dossier contenant les accounts France (ex. ".\4-PlaneFR\Outputs\France") :
 # fixe ici plutot que deduit du JSON, dont path_in.accounts change a chaque run
-$accountsBaseDir = ".\4-PlaneFR\Outputs\France"
+$accountsBaseDir = ".\4-PlaneFR\Outputs\France$Suffix"
 
-# Dossier d'accounts dont les sorties de scenario vont dans "no_SSP"
-$noSspAccountsName = "Base_year_2015"
+# Dossier d'accounts dont les sorties de scenario vont dans "no_SSP<Suffix>"
+$noSspAccountsName = if ($Suffix) { "Base_year$Suffix" } else { "Base_year_2015" }
 
 # Sortie baseline copiee dans chaque dossier de groupe (no_SSP, SSP1_2050...),
-# pour servir de scenario de reference aux figures de Module_PlaneFR
-$referenceBaselineName = "Base_year_2015"
+# pour servir de scenario de reference aux figures de Module_PlaneFR. Avec
+# -Suffix, c'est le scenario de choc Base_year<Suffix> des accounts
+# $noSspAccountsName (pas de run baseline sans choc).
+$referenceBaselineName = if ($Suffix) { "Base_year$Suffix" } else { "Base_year_2015" }
 
 function Get-ScenarioGroup {
     param(
@@ -56,9 +75,9 @@ function Get-ScenarioGroup {
         [string]$AccountsName
     )
     if ($AccountsName -eq $noSspAccountsName) {
-        return "no_SSP"
+        return "no_SSP$Suffix"
     }
-    return $AccountsName
+    return Add-Suffix $AccountsName
 }
 
 function Set-EngineSettings {
@@ -98,8 +117,8 @@ function Set-EngineSettings {
     else {
         $group = Get-ScenarioGroup -AccountsName $AccountsName
         $settings.path_in.accounts = Join-Path $accountsBaseDir $AccountsName
-        $settings.path_in.shock    = ".\4-PlaneFR\2-shocks\1-transitions_2050\$ScenarioName"
-        $settings.path_out         = Join-Path (Join-Path $outBaseDir $group) $ScenarioName
+        $settings.path_in.shock    = ".\4-PlaneFR\2-shocks\1-transitions_2050$Suffix\$ScenarioName"
+        $settings.path_out         = Join-Path (Join-Path $outBaseDir $group) (Add-Suffix $ScenarioName)
     }
 
     $json = $settings | ConvertTo-Json -Depth 10
@@ -111,11 +130,14 @@ function Set-EngineSettings {
 # (dossier d'accounts de data\4-PlaneFR\Outputs\France hors "2019",
 # scenario de data\4-PlaneFR\2-shocks\1-transitions_2050) ===
 
-$baselineYears = 2015, 2019
-$scenarios     = Get-ChildItem -Path $shocksDir -Directory | Select-Object -ExpandProperty Name
+$baselineYears = if ($Suffix) { @() } else { 2015, 2019 }
+$scenarios    = Get-ChildItem -Path $shocksDir -Directory | Select-Object -ExpandProperty Name
+# Accounts no_SSP en premier : leur baseline de reference est copiee dans les
+# groupes suivants
 $accountsNames = Get-ChildItem -Path (Join-Path $projectDir "data\$accountsBaseDir") -Directory |
     Where-Object { $_.Name -notmatch "2019" } |
-    Select-Object -ExpandProperty Name
+    Select-Object -ExpandProperty Name |
+    Sort-Object { $_ -ne $noSspAccountsName }, { $_ }
 
 foreach ($year in $baselineYears) {
     Write-Host "=== engine : baseline Base_year_$year ===" -ForegroundColor Cyan
@@ -131,6 +153,12 @@ foreach ($year in $baselineYears) {
 
 foreach ($accountsName in $accountsNames) {
     foreach ($scenario in $scenarios) {
+        # La baseline de reference de ce groupe est copiee depuis no_SSP<Suffix>
+        # (cf. ci-dessous) : inutile de la calculer
+        if ($scenario -eq $referenceBaselineName -and $accountsName -ne $noSspAccountsName) {
+            continue
+        }
+
         Write-Host "=== engine : $accountsName / $scenario ===" -ForegroundColor Cyan
 
         Set-EngineSettings -ScenarioName $scenario -AccountsName $accountsName

@@ -7,6 +7,12 @@ dans laquelle seuls les stressors des secteurs 'Food' subsistent :
       (0 si le scénario ne choque pas l'extension) ;
     - toutes les autres colonnes : dS = -1, soit S_2050 = S_base x (1 + dS) = 0.
 
+Exceptions pour les extensions en S_Z (cf. S_Z_FILTERS) : dom_ghg_combustion
+garde les colonnes Food + engrais, dom_raw_materials garde les lignes Food
+(produits prélevés) plutôt que les colonnes. Les extensions de GES en S_x_dom
+(dom_ghg_emissions, ghg_emissions) gardent aussi les colonnes des engrais
+(cf. S_X_DOM_EXTRA_SECTORS).
+
 Les secteurs Food sont les 'sector' ayant un 1 dans la colonne 'Food' de la
 feuille 'M' de Module_PlaneFR/data/bridge_matrices.xlsx, auxquels on ajoute
 FOOD_EXTRA_SECTORS et dont on retire FOOD_EXCLUDED_SECTORS.
@@ -50,12 +56,43 @@ S_NAMES = ("S_x_dom", "S_Z")
 
 FOOD_EXTRA_SECTORS = {"Products of forestry, logging and related services (02)"}
 FOOD_EXCLUDED_SECTORS = {"Hotel and restaurant services (55)"}
+FERTILIZER_SECTORS = {"N-fertiliser", "P- and other fertiliser"}
+
+# Extensions en S_Z (lignes = produits, colonnes = secteurs utilisateurs) :
+# axe filtré et secteurs supplémentaires conservés. Par défaut (S_x_dom), on
+# garde les colonnes des secteurs Food.
+#   - ghg_combustion : colonnes Food + engrais -> émissions de combustion des
+#     secteurs de l'agri-food system ;
+#   - raw_materials : lignes Food -> toute la biomasse prélevée (agricole et
+#     forestière), quel que soit le secteur qui l'utilise.
+S_Z_FILTERS = {
+    "dom_ghg_combustion": ("columns", FERTILIZER_SECTORS),
+    "dom_raw_materials": ("index", set()),
+}
+
+# Extensions en S_x_dom pour lesquelles les engrais sont conservés en plus des
+# secteurs Food (émissions de GES attribuables à l'agri-food system).
+S_X_DOM_EXTRA_SECTORS = {
+    "dom_ghg_emissions": FERTILIZER_SECTORS,
+    "ghg_emissions": FERTILIZER_SECTORS,
+}
 
 
 def load_food_sectors():
     bridge = pd.read_excel(BRIDGE_FILE, sheet_name="M")
     food = set(bridge.loc[bridge["Food"] == 1, "sector"])
     return (food | FOOD_EXTRA_SECTORS) - FOOD_EXCLUDED_SECTORS
+
+
+def get_filter(ext_name, s_name, food_sectors):
+    """(axe, secteurs conservés) pour une extension : S_Z_FILTERS pour les
+    extensions en S_Z, sinon colonnes Food (+ S_X_DOM_EXTRA_SECTORS)."""
+    if s_name == "S_Z":
+        if ext_name not in S_Z_FILTERS:
+            raise ValueError(f"Extension en S_Z sans filtre défini dans S_Z_FILTERS : {ext_name}")
+        axis, extra = S_Z_FILTERS[ext_name]
+        return axis, food_sectors | extra
+    return "columns", food_sectors | S_X_DOM_EXTRA_SECTORS.get(ext_name, set())
 
 
 def get_extensions(group):
@@ -70,11 +107,16 @@ def get_extensions(group):
     return extensions
 
 
-def compute_ds_agri(ds, food_sectors):
-    """Secteurs Food : dS inchangé ; autres secteurs : dS = -1 (S = 0)."""
-    is_food = ds.columns.get_level_values("sector").isin(food_sectors)
+def compute_ds_agri(ds, axis, kept_sectors):
+    """Secteurs conservés (sur l'axe donné, "columns" ou "index") : dS inchangé ;
+    autres secteurs : dS = -1 (S = 0)."""
     ds = ds.copy()
-    ds.loc[:, ~is_food] = -1.0
+    if axis == "index":
+        is_kept = ds.index.get_level_values("sector").isin(kept_sectors)
+        ds.loc[~is_kept, :] = -1.0
+    else:
+        is_kept = ds.columns.get_level_values("sector").isin(kept_sectors)
+        ds.loc[:, ~is_kept] = -1.0
     return ds
 
 
@@ -106,14 +148,17 @@ def write_extension_agri(group, scenario_dir, ext_name, s_name, info, food_secto
     else:
         s_base = pd.read_pickle(base_ext_dir / f"{s_name}.pkl")
         ds = pd.DataFrame(0.0, index=s_base.index, columns=s_base.columns)
-    write_ds(out_dir, compute_ds_agri(ds, food_sectors), ds_name)
+    axis, kept_sectors = get_filter(ext_name, s_name, food_sectors)
+    write_ds(out_dir, compute_ds_agri(ds, axis, kept_sectors), ds_name)
 
 
 def check_food_sectors(group, ext_name, s_name, food_sectors):
     s_base = pd.read_pickle(EXTENSIONS_BASE_DIRS[group] / ext_name / f"{s_name}.pkl")
-    unknown = sorted(food_sectors - set(s_base.columns.get_level_values("sector")))
+    axis, kept_sectors = get_filter(ext_name, s_name, food_sectors)
+    labels = s_base.index if axis == "index" else s_base.columns
+    unknown = sorted(kept_sectors - set(labels.get_level_values("sector")))
     if unknown:
-        print(f"[warn] {group} / {ext_name} : secteurs Food absents des colonnes de {s_name} : {unknown}")
+        print(f"[warn] {group} / {ext_name} : secteurs conservés absents de {s_name} ({axis}) : {unknown}")
 
 
 def ignore_data_xlsx(_dir, names):

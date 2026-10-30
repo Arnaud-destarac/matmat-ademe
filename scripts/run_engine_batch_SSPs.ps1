@@ -6,12 +6,27 @@ et path_out) dans settings_engine_SSPs.json avant chaque run.
 path_in.accounts est conserve tel quel (ex. Outputs\World\Base_year_2019).
 Les sorties sont ecrites dans le dossier parent du path_out initial
 (ex. .\4-PlaneFR\Outputs\World\<scenario>).
+
+-Suffix (ex. "_agri") : lit les chocs dans 3-SSPs_2050<Suffix> et garantit
+que chaque dossier de sortie se termine par <Suffix>.
 #>
+
+param(
+    # Suffixe des dossiers de chocs et de sortie ("" par defaut, ex. "_agri")
+    [string]$Suffix = ""
+)
 
 $projectDir = Split-Path -Parent $PSScriptRoot
 
 $engineSettingsPath = Join-Path $projectDir "data\4-PlaneFR\Settings\4-engine\settings_engine_SSPs.json"
-$shocksDir          = Join-Path $projectDir "data\4-PlaneFR\2-shocks\3-SSPs_2050"
+$shocksDir          = Join-Path $projectDir "data\4-PlaneFR\2-shocks\3-SSPs_2050$Suffix"
+
+function Add-Suffix {
+    param([string]$Name)
+    # Ajoute $Suffix au nom s'il ne s'y termine pas deja
+    if ($Name.EndsWith($Suffix)) { return $Name }
+    return "$Name$Suffix"
+}
 
 Set-Location $projectDir
 
@@ -28,8 +43,8 @@ function Set-EngineSettings {
 
     $settings = Get-Content -Raw -Path $engineSettingsPath | ConvertFrom-Json
 
-    $settings.path_in.shock = ".\4-PlaneFR\2-shocks\3-SSPs_2050\$ScenarioName"
-    $settings.path_out      = Join-Path $engineOutBaseDir $ScenarioName
+    $settings.path_in.shock = ".\4-PlaneFR\2-shocks\3-SSPs_2050$Suffix\$ScenarioName"
+    $settings.path_out      = Join-Path $engineOutBaseDir (Add-Suffix $ScenarioName)
 
     $json = $settings | ConvertTo-Json -Depth 10
     # Ecriture en UTF-8 sans BOM pour eviter les erreurs de parsing JSON cote Python

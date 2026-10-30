@@ -17,12 +17,17 @@ n'existe que dans l'ancien wheel installe pour le projet datapack
 (matmat==0.9.0b0). Ce script edite donc le fichier de settings situe dans
 matmat-ademe, mais lance la commande depuis le dossier datapack (frere de
 matmat-ademe), pour utiliser son environnement/CLI.
+
+-Suffix (ex. "_agri") : lit Outputs_inter\gmrio_to_snac_s\SSPs<Suffix> et
+ecrit dans Outputs\France<Suffix>.
 #>
 
 param(
     # Version Exiobase a utiliser (ex. "3.11.2") : selectionne le
     # sous-dossier <Version>_pxp_<annee> des scenarios qui en ont un
-    [string]$Version = "3.11.2"
+    [string]$Version = "3.11.2",
+    # Suffixe des dossiers d'entree et de sortie ("" par defaut, ex. "_agri")
+    [string]$Suffix = ""
 )
 
 # Chemins calcules relativement a l'emplacement de ce script, pour que le
@@ -39,8 +44,8 @@ $dataDir = Join-Path $matmatAdemeDir "data"
 
 # Chemins (relatifs a data) des sorties gmrio_to_snac_s par scenario et des
 # sorties update_calib_fr
-$newerBaseDir = ".\4-PlaneFR\Outputs_inter\gmrio_to_snac_s\SSPs"
-$outBaseDir   = ".\4-PlaneFR\Outputs\France"
+$newerBaseDir = ".\4-PlaneFR\Outputs_inter\gmrio_to_snac_s\SSPs$Suffix"
+$outBaseDir   = ".\4-PlaneFR\Outputs\France$Suffix"
 
 function Set-YearInPath {
     param(
