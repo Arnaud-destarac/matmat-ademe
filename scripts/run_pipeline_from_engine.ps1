@@ -4,6 +4,8 @@ Enchaine la fin du pipeline PlaneFR (a partir de l'etape engine) :
     4. extract_f_y_tot    (matmat-ademe)
     5. reformat_d_cba_monde_europe (matmat-ademe)
     6. reformat_d_cba_k   (matmat-ademe)
+    7. export_dS
+    8. compute_ds_x_dom
 
 Chaque etape est deleguee au script dedie (run_engine_batch.ps1) ou lancee
 directement pour les scripts Python (etapes 4 a 6). Toutes les etapes

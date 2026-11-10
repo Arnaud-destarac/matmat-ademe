@@ -22,7 +22,7 @@ MODULE_PLANEFR_DIR = Path(r"C:\Users\Arnaud\Documents\CIRED\PlaneFR\Code\Module_
 sys.path.insert(0, str(MODULE_PLANEFR_DIR / "notebooks"))
 from planefr_lib import config  # noqa: E402
 
-BASE_YEAR_FOLDER = config.BASE_DATA_DIR / "Base_year_2015"
+BASE_YEAR_FOLDER = config.BASE_DATA_DIR / "no_SSP" / "Base_year_2015"
 OTHER_SCENARIO_FOLDERS = [
     d for d in config.get_scenario_folders(exclude_2019=True) if d.name != BASE_YEAR_FOLDER.name
 ]

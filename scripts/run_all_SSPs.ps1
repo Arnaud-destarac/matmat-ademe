@@ -14,6 +14,14 @@ Enchaine les etapes SSPs dans l'ordre :
                                 Module_PlaneFR/data/<version>/<SSP|no_SSP>/)
 7. reformat_d_cba_monde_europe (reformat_d_cba_monde_europe.py)
 8. reformat_d_cba_k            (reformat_d_cba_k.py)
+9. export_dS                   (export_dS.py : S_extraction.xlsx)
+10. compute_ds_x_dom           (compute_ds_x_dom.py : dS_x_dom des chocs
+                                manuels + application des chocs F_Y_tot)
+
+Pas d'etape extract_f_y_tot : elle ne depend que d'Exiobase brut (F_Y_tot
+World de Base_year_2015/2019), pas des scenarios ; elle doit avoir ete
+lancee au moins une fois (run_pipeline_from_engine.ps1 ou a la main) pour
+que reformat_d_cba_monde_europe trouve Outputs\World\Base_year_*\...\F_Y_tot.pkl.
 
 Les etapes 7 et 8 (comme dans run_pipeline_from_engine.ps1) traitent tous les
 scenarios de Module_PlaneFR/data/<version>, y compris ceux imbriques par SSP
@@ -44,7 +52,9 @@ $steps = @(
     @{ Name = "update_calib_fr";             Script = "run_update_calib_fr_batch_SSPs.ps1"; Args = @{ Version = $Version } },
     @{ Name = "engine France";               Script = "run_engine_batch.ps1";               Args = @{ Version = $Version } },
     @{ Name = "reformat_d_cba_monde_europe"; Script = "reformat_d_cba_monde_europe.py" },
-    @{ Name = "reformat_d_cba_k";            Script = "reformat_d_cba_k.py" }
+    @{ Name = "reformat_d_cba_k";            Script = "reformat_d_cba_k.py" },
+    @{ Name = "export_dS";                   Script = "export_dS.py" },
+    @{ Name = "compute_ds_x_dom";            Script = "compute_ds_x_dom.py" }
 )
 
 foreach ($step in $steps) {

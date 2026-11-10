@@ -41,12 +41,12 @@ MATMAT_DIR = Path(r"C:\Users\Arnaud\Documents\CIRED\PlaneFR\Code\MatMat\matmat-a
 
 S_EXTRACTION_FILE = MODULE_PLANEFR_DIR / "data" / "S_extraction.xlsx"
 MANUAL_PARAM_FILE = (
-    MATMAT_DIR / "data" / "4-PlaneFR" / "Settings" / "a-manual_shocks" / "input" / "my_manual_param.xlsx"
+    MATMAT_DIR / "data" / "4-PlaneFR" / "Settings" / "a-manual_shocks" / "France" / "input" / "my_manual_param.xlsx"
 )
 # Version Exiobase (variable d'environnement PLANEFR_EXIOBASE_VERSION, positionnée
 # par run_full_pipeline.ps1 / run_pipeline_from_engine.ps1)
 EXIOBASE_VERSION = os.environ.get("PLANEFR_EXIOBASE_VERSION", "3.11.2")
-SCENARIO_DATA_DIR = MODULE_PLANEFR_DIR / "data" / EXIOBASE_VERSION
+SCENARIO_DATA_DIR = MODULE_PLANEFR_DIR / "data" / EXIOBASE_VERSION / "no_SSP"
 SHOCKS_OUTPUT_DIR = MATMAT_DIR / "data" / "4-PlaneFR" / "2-shocks" / "1-transitions_2050"
 
 BASE_YEAR_NAME = "Base_year_2015"
@@ -187,6 +187,13 @@ def apply_f_y_tot_shocks(lp_name):
                 continue
 
             f_y_path = SCENARIO_DATA_DIR / folder_name / "extensions" / f"dom_{lp_name}" / "F_Y_tot.pkl"
+            if not f_y_path.exists():
+                # Le F_Y_tot.pkl du scénario est créé par reformat_d_cba_monde_europe
+                # dans les dossiers produits par l'engine, qui a lui-même besoin des
+                # dS_x_dom écrits plus haut : on ne bloque pas le calcul des dS, il
+                # suffira de relancer ce script après engine + reformat.
+                print(f"[skip] {f_y_path} absent (engine/reformat_d_cba_monde_europe pas encore lancés ?), choc F_Y_tot '{row_name}' non appliqué.")
+                continue
             f_y = pd.read_pickle(f_y_path)
             if row_name not in f_y.index:
                 print(f"[skip] {folder_name}/dom_{lp_name}: '{row_name}' absent de F_Y_tot.pkl, ignoré.")
