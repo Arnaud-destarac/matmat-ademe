@@ -1,30 +1,40 @@
 """
-Pour chaque extension dans Outputs/World/Base_year_2015 et Base_year_2019/extensions :
-- transforme d_cba.pkl / F_x_dom.pkl / F_Y_tot.pkl en versions Monde, Europe et une par région Exiobase
-- Monde  : supprime les Y_category indésirables, somme tout -> (region="World", Y_category="all", sector="all")
-- Europe : idem mais en ne gardant que les 27 premières régions -> (region="Europe", ...)
-- Région (hors FR) : idem mais en ne gardant qu'une seule région Exiobase (ex. "DK"...)
-  -> (region=<code>, ...) ; mêmes fichiers (d_cba/F_x_dom/F_Y_tot) et même arborescence
-  que Monde/Europe (dossier <ext_name>, pas de préfixe dom_), exportée dans 2019_<code>
-  (une par région listée dans detail_levels.xlsx, UE et hors UE)
-- France (FR) : cas particulier conservé tel quel -- seul F_Y_tot.pkl est exporté,
-  dans dom_{ext_name}, car d_cba/F_x_dom pour la France proviennent déjà d'un autre
-  pipeline (scénarios France dom_/imp_ existants dans data/<version>)
+For each extension in Outputs/World/Base_year_2015 and Base_year_2019/extensions:
+- turns d_cba.pkl / F_x_dom.pkl / F_Y_tot.pkl into World, Europe and one-per-Exiobase-region versions
+- World : drops the unwanted Y_categories, sums everything -> (region="World", Y_category="all", sector="all")
+- Europe: same but keeping only the first 27 regions -> (region="Europe", ...)
+- Region (except FR): same but keeping a single Exiobase region (e.g. "DK"...)
+  -> (region=<code>, ...); same files (d_cba/F_x_dom/F_Y_tot) and same tree as
+  World/Europe (<ext_name> folder, no dom_ prefix), exported to 2019_<code>
+  (one per region listed in detail_levels.xlsx, EU and non-EU)
+- France (FR): special case kept as is -- only F_Y_tot.pkl is exported, into
+  dom_{ext_name}, because d_cba/F_x_dom for France already come from another
+  pipeline (existing dom_/imp_ France scenarios in data/<version>)
 
-Base_year_2015 (SRC_DIR[0]) ne produit qu'une version France, copiée dans tous
-les autres dossiers de scénarios déjà présents dans data/<version> (dom_{ext}),
-y compris les scénarios imbriqués par SSP (data/<version>/<SSP>/<scénario>, ex.
-no_SSP/S1_2050, SSP1_2050/TEND_2050) ;
-Base_year_2019 (SRC_DIR[1]) produit la version Monde, Europe, et une version par
-région Exiobase, chacune dans son dossier dédié (2019_W, 2019_EU27, 2019_<code>).
+The France F_Y_tot of each base year (SRC_DIR / SRC_BASE_YEARS) is copied into
+dom_{ext} of every France scenario folder with the SAME base year already
+present in data/<version>, whether directly below it (e.g. 2019_FR) or in a
+group folder (data/<version>/<group>/<scenario>, e.g. no_SSP/S1_2050,
+SSP2_2050/TEND_2050, Base_year/2019_FR). The base year of a folder is read in
+its system/info.json (base_year) and not deduced from its location: a copy of
+2019_FR placed in a group does get the 2019 F_Y_tot, and the 2050 scenarios
+(base year 2015) the 2015 F_Y_tot.
+
+Base_year_2019 (SRC_DIR[1]) also produces the World, Europe and one version per
+Exiobase region other than France, each in its own folder (2019_W, 2019_EU27,
+2019_<code>).
+
+This script rewrites F_Y_tot.pkl to its base-year value: compute_ds_x_dom.py
+(F_Y_tot shocks of the scenarios) must be run after it.
 """
 
+import json
 import os
 import pickle
 import shutil
 import pandas as pd
 
-# Chemins (relatifs à ce script, pas au répertoire de travail courant)
+# Paths (relative to this script, not to the current working directory)
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PLANEFR_DATA_DIR = os.path.join(SCRIPT_DIR, "..", "data", "4-PlaneFR")
 
@@ -32,43 +42,54 @@ SRC_DIR = [
     os.path.join(PLANEFR_DATA_DIR, "Outputs", "World", "Base_year_2015", "extensions"),
     os.path.join(PLANEFR_DATA_DIR, "Outputs", "World", "Base_year_2019", "extensions"),
 ]
+# Base year of the accounts of each SRC_DIR folder (same order)
+SRC_BASE_YEARS = [2015, 2019]
 
-# Version Exiobase (variable d'environnement PLANEFR_EXIOBASE_VERSION, positionnée
-# par run_full_pipeline.ps1 / run_pipeline_from_engine.ps1)
+# Exiobase version (environment variable PLANEFR_EXIOBASE_VERSION, set by
+# run_full_pipeline.ps1 / run_pipeline_from_engine.ps1)
 EXIOBASE_VERSION = os.environ.get("PLANEFR_EXIOBASE_VERSION", "3.11.2")
 DATA_DIR = os.path.join("C:\\Users\\Arnaud\\Documents\\CIRED\\PlaneFR\\Code\\Module_PlaneFR\\data", EXIOBASE_VERSION)
 DST_MONDE = os.path.join(DATA_DIR, "2019_W", "extensions")
 DST_EUROPE = os.path.join(DATA_DIR, "2019_EU27", "extensions")
 
-# Y_categories à exclure. Ce label ("Exports: Total (fob)") est celui des données
-# BRUTES en amont (SRC_DIR) ; il ne faut pas le confondre avec le label "Exports"
-# utilisé par les notebooks d'analyse (planefr_lib.io.exclude_y_category), qui
-# lisent eux les données déjà reformatées dans data/<version> — deux étages du
-# pipeline, deux libellés différents pour le même concept, pas une incohérence.
+# Y_categories to exclude. This label ("Exports: Total (fob)") is that of the RAW
+# upstream data (SRC_DIR); it must not be confused with the "Exports" label used
+# by the analysis notebooks (planefr_lib.io.exclude_y_category), which read the
+# data already reformatted in data/<version> -- two stages of the pipeline, two
+# different labels for the same concept, not an inconsistency.
 YCATS_EXCLUDED = {"Exports: Total (fob)"}
 
-# Liste de toutes les régions Exiobase (UE puis hors UE / agrégats "Rest of World")
-# issue du fichier de référence ; les 27 premières sont les régions européennes (UE).
+# List of all the Exiobase regions (EU then non-EU / "Rest of World" aggregates)
+# from the reference file; the first 27 are the European (EU) regions.
 DETAIL_LEVELS_PATH = os.path.join(PLANEFR_DATA_DIR, "Outputs", "World", "Base_year_2019", "system", "detail_levels.xlsx")
 with open(DETAIL_LEVELS_PATH, "rb") as f:
     _regions_df = pd.read_excel(f, sheet_name="regions")
 ALL_REGIONS = _regions_df["region"].astype(str).to_list()
 EU_REGIONS = ALL_REGIONS[:27]
 
-# Une destination 2019_<code>/extensions par région Exiobase (ex. 2019_FR, 2019_DK...)
-REGION_TARGETS = [(code, os.path.join(DATA_DIR, f"2019_{code}", "extensions")) for code in ALL_REGIONS]
+# Region handled separately: only F_Y_tot.pkl is exported, into the existing
+# France scenario folders (see FRANCE_DIRS)
+FRANCE_CODE = "FR"
+# Extensions whose France F_Y comes from the France calibration (no F_Y_tot exported)
+FRANCE_EXCLUDED_EXTENSIONS = {"ghg_emissions", "raw_materials"}
 
-# Découvrir dynamiquement les autres dossiers de scénarios déjà présents dans data/<version>
-# (scénarios France 2015, ex. Tech_NZE...) en excluant nos propres dossiers de sortie.
-# Deux arborescences coexistent :
-# - data/<version>/<scénario>/extensions         (ex. TEND_2050, Base_year_2015)
-# - data/<version>/<SSP>/<scénario>/extensions   (ex. no_SSP/S1_2050, SSP1_2050/TEND_2050)
-EXCLUDED_DIRS = {"2019_W", "2019_EU27"} | {f"2019_{code}" for code in ALL_REGIONS}
+# One 2019_<code>/extensions destination per Exiobase region other than France (e.g. 2019_DK...)
+REGION_TARGETS = [
+    (code, os.path.join(DATA_DIR, f"2019_{code}", "extensions")) for code in ALL_REGIONS if code != FRANCE_CODE
+]
+
+# Output folders entirely produced by this script (World, Europe, regions other
+# than France): never France scenarios.
+EXCLUDED_DIRS = {"2019_W", "2019_EU27"} | {f"2019_{code}" for code in ALL_REGIONS if code != FRANCE_CODE}
 
 
 def _find_scenario_extension_dirs(data_dir: str) -> list[str]:
-    """Liste les dossiers <scénario>/extensions et <SSP>/<scénario>/extensions
-    de data_dir, hors dossiers de sortie de ce script (EXCLUDED_DIRS)."""
+    """Lists the <scenario>/extensions and <group>/<scenario>/extensions folders
+    of data_dir, except the output folders of this script (EXCLUDED_DIRS). Two
+    trees coexist:
+    - data/<version>/<scenario>/extensions          (e.g. 2019_FR)
+    - data/<version>/<group>/<scenario>/extensions  (e.g. no_SSP/S1_2050, Base_year/2019_FR)
+    """
     found = []
     for d in sorted(os.listdir(data_dir)):
         top = os.path.join(data_dir, d)
@@ -83,14 +104,51 @@ def _find_scenario_extension_dirs(data_dir: str) -> list[str]:
     return found
 
 
-OTHER_DIRS = _find_scenario_extension_dirs(DATA_DIR)
+def _is_france_scenario(extensions_dir: str) -> bool:
+    """True if the extensions are split into dom_<ext> / imp_<ext> (outputs of
+    the France engine), unlike the World/Europe/region folders (a single <ext>
+    folder), including a possible copy of those in a group."""
+    return any(d.startswith(("dom_", "imp_")) for d in os.listdir(extensions_dir))
+
+
+def _scenario_base_year(extensions_dir: str) -> int:
+    """Base year of a France scenario: base_year of its system/info.json. Failing
+    that (missing or incomplete file), 2019 if the folder name contains "2019",
+    2015 otherwise."""
+    scenario_dir = os.path.dirname(extensions_dir)
+    try:
+        with open(os.path.join(scenario_dir, "system", "info.json"), encoding="utf-8-sig") as f:
+            return int(json.load(f)["base_year"])
+    except (OSError, KeyError, TypeError, ValueError):
+        year = 2019 if "2019" in os.path.basename(scenario_dir) else 2015
+        print(f"[warn] {scenario_dir} : base_year unreadable in system/info.json, {year} deduced from the folder name")
+        return year
+
+
+def _find_france_dirs_by_base_year(data_dir: str) -> dict[int, list[str]]:
+    """{base year: [extensions/ folders of the France scenarios of that year]},
+    for the years of SRC_BASE_YEARS."""
+    by_year = {year: [] for year in SRC_BASE_YEARS}
+    for extensions_dir in _find_scenario_extension_dirs(data_dir):
+        if not _is_france_scenario(extensions_dir):
+            continue
+        year = _scenario_base_year(extensions_dir)
+        if year in by_year:
+            by_year[year].append(extensions_dir)
+        else:
+            print(f"[warn] {extensions_dir} : base year {year} without World accounts (SRC_BASE_YEARS), F_Y_tot not exported")
+    return by_year
+
+
+# France scenario folders already present in data/<version>, by base year
+FRANCE_DIRS = _find_france_dirs_by_base_year(DATA_DIR)
 
 
 def transform(df: pd.DataFrame, mode: str) -> pd.DataFrame:
     """
-    mode='monde'  -> toutes les régions sauf Y_cats exclus, somme -> World/all/all
-    mode='europe' -> 27 premières régions sauf Y_cats exclus, somme -> Europe/all/all
-    mode=<code>   -> une seule région Exiobase (ex. 'FR', 'DK'...), somme -> <code>/all/all
+    mode='monde'  -> all regions except the excluded Y_cats, summed -> World/all/all
+    mode='europe' -> first 27 regions except the excluded Y_cats, summed -> Europe/all/all
+    mode=<code>   -> a single Exiobase region (e.g. 'FR', 'DK'...), summed -> <code>/all/all
     """
     if "Y_category" in df.columns.names:
         mask_ycat = ~df.columns.get_level_values("Y_category").isin(YCATS_EXCLUDED)
@@ -113,7 +171,7 @@ def transform(df: pd.DataFrame, mode: str) -> pd.DataFrame:
 
 
 def _save_result(out_dir, filename, result, label):
-    """Écrit `result` en pickle sous out_dir/filename (en créant les dossiers manquants), avec un log."""
+    """Writes `result` as a pickle to out_dir/filename (creating the missing folders), with a log line."""
     os.makedirs(out_dir, exist_ok=True)
     out_pkl = os.path.join(out_dir, filename)
     with open(out_pkl, "wb") as f:
@@ -122,6 +180,7 @@ def _save_result(out_dir, filename, result, label):
 
 
 def process_extension(ext_name: str, src_dir: str):
+    base_year = SRC_BASE_YEARS[SRC_DIR.index(src_dir)]
     srcs_pkl = [
         os.path.join(src_dir, ext_name, "d_cba.pkl"),
         os.path.join(src_dir, ext_name, "F_x_dom.pkl"),
@@ -130,18 +189,18 @@ def process_extension(ext_name: str, src_dir: str):
 
     for src_pkl in srcs_pkl:
         if not os.path.exists(src_pkl):
-            print(f"  [SKIP] {os.path.basename(src_pkl)} introuvable dans {ext_name}")
+            print(f"  [SKIP] {os.path.basename(src_pkl)} not found in {ext_name}")
             continue
 
         with open(src_pkl, "rb") as f:
             df = pickle.load(f)
 
-        # Certaines extensions (ex. raw_materials) arrivent avec un index MultiIndex
-        # à un seul niveau (chaque clé est un tuple ('Primary Crops - Rice',)) au lieu
-        # d'un Index plat de chaînes ('Primary Crops - Rice'). C'est un artefact de
-        # cast_index_to_multiindex() côté pipeline d'extraction (sa contrepartie
-        # convert_single_level_multi_index_to_regular_index() n'est jamais appelée) ;
-        # on l'annule ici pour que l'index exporté soit plat.
+        # Some extensions (e.g. raw_materials) come with a single-level MultiIndex
+        # (each key is a tuple ('Primary Crops - Rice',)) instead of a flat Index
+        # of strings ('Primary Crops - Rice'). This is an artefact of
+        # cast_index_to_multiindex() in the extraction pipeline (its counterpart
+        # convert_single_level_multi_index_to_regular_index() is never called);
+        # it is undone here so that the exported index is flat.
         if isinstance(df.index, pd.MultiIndex) and df.index.nlevels == 1:
             df.index = df.index.get_level_values(0)
 
@@ -156,43 +215,34 @@ def process_extension(ext_name: str, src_dir: str):
 
         filename = os.path.basename(src_pkl)
 
-        if src_dir == SRC_DIR[0]:
-            # Base_year_2015 : une seule version France, dupliquée dans chaque
-            # dossier de scénario déjà présent (ils partagent tous le même base year).
-            # Ne s'applique que pour F_Y_tot.pkl (srcs_pkl[2]).
-            if filename != "F_Y_tot.pkl" or (ext_name == "ghg_emissions" or ext_name == "raw_materials"):
-                continue
-            result = transform(df, "FR")
-            for path in OTHER_DIRS:
-                _save_result(os.path.join(path, f"dom_{ext_name}"), filename, result, "FR")
-        else:
-            targets = [("monde", DST_MONDE), ("europe", DST_EUROPE)] + REGION_TARGETS
-            for mode, dst_base in targets:
-                # Seule la France (FR) est traitée à part : les autres régions
-                # suivent exactement le même traitement que Monde/Europe (les
-                # 3 fichiers, dossier <ext_name> sans préfixe dom_).
-                is_france = mode == "FR"
-                if is_france and (filename != "F_Y_tot.pkl" or (ext_name == "ghg_emissions" or ext_name == "raw_materials")):
-                    continue
-                out_dir = os.path.join(dst_base, ext_name if not is_france else f"dom_{ext_name}")
-                _save_result(out_dir, filename, transform(df, mode), mode)
+        # France: only F_Y_tot.pkl is exported, into dom_<ext> of each France
+        # scenario folder whose base year is that of these World accounts
+        # (2015: base years and 2050 scenarios; 2019: 2019_FR and its copies).
+        if filename == "F_Y_tot.pkl" and ext_name not in FRANCE_EXCLUDED_EXTENSIONS:
+            result = transform(df, FRANCE_CODE)
+            for path in FRANCE_DIRS[base_year]:
+                _save_result(os.path.join(path, f"dom_{ext_name}"), filename, result, FRANCE_CODE)
+
+        # World, Europe and regions other than France: produced from
+        # Base_year_2019 only (the 3 files, <ext_name> folder without dom_ prefix).
+        if src_dir == SRC_DIR[1]:
+            for mode, dst_base in [("monde", DST_MONDE), ("europe", DST_EUROPE)] + REGION_TARGETS:
+                _save_result(os.path.join(dst_base, ext_name), filename, transform(df, mode), mode)
 
 
 def _clean_generated_outputs():
-    """Supprime entièrement le dossier extensions/ de chaque sortie Monde/Europe/
-    région (2019_W, 2019_EU27, 2019_<code>) avant de le régénérer -- SAUF 2019_FR.
+    """Deletes the whole extensions/ folder of each World/Europe/region output
+    other than France (2019_W, 2019_EU27, 2019_<code>) before regenerating it.
 
-    Monde/Europe/région (hors FR) sont entièrement produits par ce script : on
-    peut donc les recréer de zéro sans perdre de données externes. 2019_FR, lui,
-    n'est pas entièrement produit par ce script -- comme les scénarios France
-    2015 dans OTHER_DIRS, il contient déjà des sous-dossiers dom_{ext}/imp_{ext}
-    (d_cba.pkl, F_x_dom.pkl...) provenant d'un autre pipeline, dans lesquels ce
-    script ne fait qu'ajouter dom_{ext}/F_Y_tot.pkl. Le supprimer effacerait ces
-    données externes (vécu : un run précédent a écrasé 2019_FR de cette façon).
+    These folders are entirely produced by this script: they can therefore be
+    recreated from scratch without losing external data. The France scenario
+    folders (FRANCE_DIRS, including 2019_FR) are never deleted: they already
+    contain dom_{ext}/imp_{ext} sub-folders (d_cba.pkl, F_x_dom.pkl...) coming
+    from the France engine, into which this script only adds
+    dom_{ext}/F_Y_tot.pkl. Deleting them would erase this external data (it
+    happened: a previous run overwrote 2019_FR that way).
     """
-    for mode, dst_base in [("monde", DST_MONDE), ("europe", DST_EUROPE)] + REGION_TARGETS:
-        if mode == "FR":
-            continue
+    for _mode, dst_base in [("monde", DST_MONDE), ("europe", DST_EUROPE)] + REGION_TARGETS:
         if os.path.isdir(dst_base):
             shutil.rmtree(dst_base)
 
@@ -204,14 +254,14 @@ def main():
         extensions = [
             d for d in os.listdir(src_dir)
         ]
-        print(f"{len(extensions)} extension(s) trouvée(s) : {extensions}\n")
+        print(f"{len(extensions)} extension(s) found: {extensions}\n")
 
         for ext in extensions:
             print(f"--- {ext} ---")
             process_extension(ext, src_dir)
             print()
 
-    print("Terminé.")
+    print("Done.")
 
 
 if __name__ == "__main__":

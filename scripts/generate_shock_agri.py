@@ -1,34 +1,34 @@
 """
-Génère, pour chaque jeu de chocs de data/4-PlaneFR/2-shocks (1-transitions_2050,
-3-SSPs_2050), une variante '_agri' (1-transitions_2050_agri, 3-SSPs_2050_agri)
-dans laquelle seuls les stressors des secteurs 'Food' subsistent :
+Generates, for each shock set of data/4-PlaneFR/2-shocks (1-transitions_2050,
+3-SSPs_2050), an '_agri' variant (1-transitions_2050_agri, 3-SSPs_2050_agri)
+in which only the stressors of the 'Food' sectors remain:
 
-    - colonnes (region, ..., sector) des secteurs Food : dS = dS du scénario
-      (0 si le scénario ne choque pas l'extension) ;
-    - toutes les autres colonnes : dS = -1, soit S_2050 = S_base x (1 + dS) = 0.
+    - (region, ..., sector) columns of the Food sectors: dS = dS of the scenario
+      (0 if the scenario does not shock the extension);
+    - all the other columns: dS = -1, i.e. S_2050 = S_base x (1 + dS) = 0.
 
-Exceptions pour les extensions en S_Z (cf. S_Z_FILTERS) : dom_ghg_combustion
-garde les colonnes Food + engrais, dom_raw_materials garde les lignes Food
-(produits prélevés) plutôt que les colonnes. Les extensions de GES en S_x_dom
-(dom_ghg_emissions, ghg_emissions) gardent aussi les colonnes des engrais
-(cf. S_X_DOM_EXTRA_SECTORS).
+Exceptions for the S_Z extensions (see S_Z_FILTERS): dom_ghg_combustion keeps
+the Food + fertilizer columns, dom_raw_materials keeps the Food rows (extracted
+products) rather than the columns. The GHG extensions in S_x_dom
+(dom_ghg_emissions, ghg_emissions) also keep the fertilizer columns (see
+S_X_DOM_EXTRA_SECTORS).
 
-Les secteurs Food sont les 'sector' ayant un 1 dans la colonne 'Food' de la
-feuille 'M' de Module_PlaneFR/data/bridge_matrices.xlsx, auxquels on ajoute
-FOOD_EXTRA_SECTORS et dont on retire FOOD_EXCLUDED_SECTORS.
+The Food sectors are the 'sector' values with a 1 in the 'Food' column of the
+'M' sheet of Module_PlaneFR/data/bridge_matrices.xlsx, plus FOOD_EXTRA_SECTORS
+and minus FOOD_EXCLUDED_SECTORS.
 
-Chaque scénario <scenario> est d'abord copié tel quel, sans les .xlsx de
-données (system/ : dA, dY, dY_k en .pkl, detail_levels, info ; extensions/ :
-detail_levels, info), puis les dS (.pkl uniquement) de toutes les extensions
-sont réécrits. Les extensions traitées sont toutes celles des accounts de base
-(EXTENSIONS_BASE_DIRS) ayant un S_x_dom.pkl (choc dS_x_dom) ou, à défaut, un
-S_Z.pkl (choc dS_Z, colonnes = secteurs utilisateurs ; S_Y n'est pas choqué) ;
-celles absentes du dossier de choc d'origine sont créées (detail_levels.xlsx
-copié depuis les accounts de base, info.json).
+Each <scenario> is first copied as is, without the data .xlsx files (system/:
+dA, dY, dY_k as .pkl, detail_levels, info; extensions/: detail_levels, info),
+then the dS (.pkl only) of all the extensions are rewritten. The extensions
+processed are all those of the base accounts (EXTENSIONS_BASE_DIRS) having an
+S_x_dom.pkl (dS_x_dom shock) or, failing that, an S_Z.pkl (dS_Z shock, columns
+= user sectors; S_Y is not shocked); those missing from the original shock
+folder are created (detail_levels.xlsx copied from the base accounts,
+info.json).
 
-Un scénario supplémentaire 'Base_year_agri' est créé dans chaque dossier
-'_agri' : aucun choc sur le système (system/ ne contient que detail_levels.xlsx
-et info.json), dS = 0 sur les secteurs Food (S inchangé) et -1 ailleurs.
+An additional 'Base_year_agri' scenario is created in each '_agri' folder: no
+shock on the system (system/ only contains detail_levels.xlsx and info.json),
+dS = 0 on the Food sectors (S unchanged) and -1 elsewhere.
 """
 
 import json
@@ -36,7 +36,7 @@ import shutil
 
 import pandas as pd
 
-from compute_ds_x_dom import MATMAT_DIR, MODULE_PLANEFR_DIR, make_pickle_portable
+from compute_ds_x_dom import MATMAT_DIR, MODULE_PLANEFR_DIR, get_ssp_base_accounts_dir, make_pickle_portable
 
 SHOCKS_DIR = MATMAT_DIR / "data" / "4-PlaneFR" / "2-shocks"
 OUTPUTS_DIR = MATMAT_DIR / "data" / "4-PlaneFR" / "Outputs"
@@ -45,33 +45,35 @@ BRIDGE_FILE = MODULE_PLANEFR_DIR / "data" / "bridge_matrices.xlsx"
 AGRI_SUFFIX = "_agri"
 BASE_YEAR_SCENARIO = "Base_year_agri"
 
-# Jeu de chocs -> dossier extensions des accounts de base correspondants
+# Shock set -> extensions folder of the matching base accounts. For the SSP
+# shocks, these are the World accounts to which the engine applies them
+# (path_in.accounts of settings_engine_SSPs.json), as in generate_shock_dS.py.
 EXTENSIONS_BASE_DIRS = {
     "1-transitions_2050": OUTPUTS_DIR / "France" / "Base_year_2015" / "extensions",
-    "3-SSPs_2050": OUTPUTS_DIR / "World" / "Base_year_2019" / "extensions",
+    "3-SSPs_2050": get_ssp_base_accounts_dir() / "extensions",
 }
 
-# Coefficients d'extension choqués, par ordre de préférence
+# Shocked extension coefficients, in order of preference
 S_NAMES = ("S_x_dom", "S_Z")
 
 FOOD_EXTRA_SECTORS = {"Products of forestry, logging and related services (02)"}
 FOOD_EXCLUDED_SECTORS = {"Hotel and restaurant services (55)"}
 FERTILIZER_SECTORS = {"N-fertiliser", "P- and other fertiliser"}
 
-# Extensions en S_Z (lignes = produits, colonnes = secteurs utilisateurs) :
-# axe filtré et secteurs supplémentaires conservés. Par défaut (S_x_dom), on
-# garde les colonnes des secteurs Food.
-#   - ghg_combustion : colonnes Food + engrais -> émissions de combustion des
-#     secteurs de l'agri-food system ;
-#   - raw_materials : lignes Food -> toute la biomasse prélevée (agricole et
-#     forestière), quel que soit le secteur qui l'utilise.
+# S_Z extensions (rows = products, columns = user sectors): filtered axis and
+# additional sectors kept. By default (S_x_dom), the columns of the Food
+# sectors are kept.
+#   - ghg_combustion: Food + fertilizer columns -> combustion emissions of the
+#     sectors of the agri-food system;
+#   - raw_materials: Food rows -> all the extracted biomass (agricultural and
+#     forest), whatever the sector using it.
 S_Z_FILTERS = {
     "dom_ghg_combustion": ("columns", FERTILIZER_SECTORS),
     "dom_raw_materials": ("index", set()),
 }
 
-# Extensions en S_x_dom pour lesquelles les engrais sont conservés en plus des
-# secteurs Food (émissions de GES attribuables à l'agri-food system).
+# S_x_dom extensions for which the fertilizers are kept in addition to the
+# Food sectors (GHG emissions attributable to the agri-food system).
 S_X_DOM_EXTRA_SECTORS = {
     "dom_ghg_emissions": FERTILIZER_SECTORS,
     "ghg_emissions": FERTILIZER_SECTORS,
@@ -85,19 +87,19 @@ def load_food_sectors():
 
 
 def get_filter(ext_name, s_name, food_sectors):
-    """(axe, secteurs conservés) pour une extension : S_Z_FILTERS pour les
-    extensions en S_Z, sinon colonnes Food (+ S_X_DOM_EXTRA_SECTORS)."""
+    """(axis, sectors kept) for an extension: S_Z_FILTERS for the S_Z
+    extensions, otherwise Food columns (+ S_X_DOM_EXTRA_SECTORS)."""
     if s_name == "S_Z":
         if ext_name not in S_Z_FILTERS:
-            raise ValueError(f"Extension en S_Z sans filtre défini dans S_Z_FILTERS : {ext_name}")
+            raise ValueError(f"S_Z extension without a filter defined in S_Z_FILTERS: {ext_name}")
         axis, extra = S_Z_FILTERS[ext_name]
         return axis, food_sectors | extra
     return "columns", food_sectors | S_X_DOM_EXTRA_SECTORS.get(ext_name, set())
 
 
 def get_extensions(group):
-    """Extension -> coefficients choqués : S_x_dom si présent, sinon S_Z
-    (extensions en format produit, ex. dom_raw_materials des accounts France)."""
+    """Extension -> shocked coefficients: S_x_dom if present, otherwise S_Z
+    (extensions in product format, e.g. dom_raw_materials of the France accounts)."""
     extensions = {}
     for ext in sorted(EXTENSIONS_BASE_DIRS[group].iterdir()):
         for s_name in S_NAMES:
@@ -108,8 +110,8 @@ def get_extensions(group):
 
 
 def compute_ds_agri(ds, axis, kept_sectors):
-    """Secteurs conservés (sur l'axe donné, "columns" ou "index") : dS inchangé ;
-    autres secteurs : dS = -1 (S = 0)."""
+    """Sectors kept (on the given axis, "columns" or "index"): dS unchanged;
+    other sectors: dS = -1 (S = 0)."""
     ds = ds.copy()
     if axis == "index":
         is_kept = ds.index.get_level_values("sector").isin(kept_sectors)
@@ -128,9 +130,9 @@ def write_ds(out_dir, ds, ds_name):
 
 
 def write_extension_agri(group, scenario_dir, ext_name, s_name, info, food_sectors):
-    """Réécrit d<s_name> (dS_x_dom ou dS_Z) de l'extension dans scenario_dir
-    (dossier _agri), à partir du dS déjà présent (copié du scénario d'origine)
-    ou de 0 s'il n'y en a pas."""
+    """Rewrites d<s_name> (dS_x_dom or dS_Z) of the extension in scenario_dir
+    (_agri folder), from the dS already present (copied from the original
+    scenario) or from 0 if there is none."""
     base_ext_dir = EXTENSIONS_BASE_DIRS[group] / ext_name
     out_dir = scenario_dir / "extensions" / ext_name
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -158,11 +160,11 @@ def check_food_sectors(group, ext_name, s_name, food_sectors):
     labels = s_base.index if axis == "index" else s_base.columns
     unknown = sorted(kept_sectors - set(labels.get_level_values("sector")))
     if unknown:
-        print(f"[warn] {group} / {ext_name} : secteurs conservés absents de {s_name} ({axis}) : {unknown}")
+        print(f"[warn] {group} / {ext_name} : kept sectors missing from {s_name} ({axis}): {unknown}")
 
 
 def ignore_data_xlsx(_dir, names):
-    """Seuls les .pkl sont copiés pour les données ; .xlsx gardé pour detail_levels."""
+    """Only the .pkl files are copied for the data; .xlsx kept for detail_levels."""
     return [n for n in names if n.endswith(".xlsx") and n != "detail_levels.xlsx"]
 
 
@@ -176,7 +178,7 @@ def make_scenario_agri(group, src_dir, out_dir, extensions, food_sectors):
 
 
 def make_base_year_agri(group, template_dir, out_dir, extensions, food_sectors):
-    """Base_year_agri : system sans choc, dS = 0 (Food) / -1 (autres)."""
+    """Base_year_agri: system without shock, dS = 0 (Food) / -1 (others)."""
     print(f"=== {out_dir.parent.name} / {out_dir.name} ===")
     template_info = json.loads((template_dir / "system" / "info.json").read_text(encoding="utf-8"))
     base_year = template_info["base_year"]
@@ -190,7 +192,7 @@ def make_base_year_agri(group, template_dir, out_dir, extensions, food_sectors):
     for ext_name, s_name in extensions.items():
         ext_dir = out_dir / "extensions" / ext_name
         ext_dir.mkdir(parents=True)
-        # detail_levels repris du scénario d'origine (même résolution que les chocs)
+        # detail_levels taken from the original scenario (same resolution as the shocks)
         template_dl = template_dir / "extensions" / ext_name / "detail_levels.xlsx"
         if template_dl.exists():
             shutil.copy2(template_dl, ext_dir / "detail_levels.xlsx")
@@ -199,7 +201,7 @@ def make_base_year_agri(group, template_dir, out_dir, extensions, food_sectors):
 
 def main():
     food_sectors = load_food_sectors()
-    print(f"{len(food_sectors)} secteurs Food : {sorted(food_sectors)}")
+    print(f"{len(food_sectors)} Food sectors: {sorted(food_sectors)}")
 
     for group in EXTENSIONS_BASE_DIRS:
         src_group_dir = SHOCKS_DIR / group

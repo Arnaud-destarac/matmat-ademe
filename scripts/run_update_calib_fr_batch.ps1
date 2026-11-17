@@ -1,29 +1,27 @@
 <#
-Enchaine l'etape update_calib_fr pour chaque annee de base (2015, 2019), en
-adaptant les chemins (annee) dans le fichier de settings JSON avant chaque
-run.
+Chains the update_calib_fr step for each base year (2015, 2019), adapting
+the paths (year) in the JSON settings file before each run.
 
-Le pipeline "update_calib_fr" n'est pas (encore) porte dans matmat-ademe
-(src/matmat/workflows/pipelines/accounts/ ne contient que "aggregation" et
-"gmrio_to_snac_s" ; -p update_calib_fr n'existe pas dans son cli.py). Il
-n'existe que dans l'ancien wheel installe pour le projet datapack
-(matmat==0.9.0b0). Ce script edite donc le fichier de settings situe dans
-matmat-ademe, mais lance la commande depuis le dossier datapack (frere de
-matmat-ademe), pour utiliser son environnement/CLI.
+The "update_calib_fr" pipeline is not (yet) ported to matmat-ademe
+(src/matmat/workflows/pipelines/accounts/ only contains "aggregation" and
+"gmrio_to_snac_s"; -p update_calib_fr does not exist in its cli.py). It only
+exists in the old wheel installed for the datapack project
+(matmat==0.9.0b0). This script therefore edits the settings file located in
+matmat-ademe, but runs the command from the datapack folder (sibling of
+matmat-ademe), to use its environment/CLI.
 
-La version Exiobase (-Version, 3.11.2 par defaut) est reportee dans le chemin
-newer_accounts (sortie gmrio_to_snac_s) ; older_accounts (comptes France de
-reference) n'est pas modifie.
+The Exiobase version (-Version, 3.11.2 by default) is written into the
+newer_accounts path (gmrio_to_snac_s output); older_accounts (reference
+France accounts) is not modified.
 #>
 
 param(
-    # Version Exiobase a utiliser (ex. "3.11.2")
+    # Exiobase version to use (e.g. "3.11.2")
     [string]$Version = "3.11.2"
 )
 
-# Chemins calcules relativement a l'emplacement de ce script, pour que le
-# script fonctionne quel que soit le repertoire courant depuis lequel il est
-# invoque.
+# Paths computed relative to the location of this script, so that the
+# script works whatever the current directory it is invoked from.
 $matmatAdemeDir = Split-Path -Parent $PSScriptRoot
 $matmatRootDir  = Split-Path -Parent $matmatAdemeDir
 $datapackDir    = Join-Path $matmatRootDir "datapack"
@@ -37,8 +35,8 @@ function Set-YearInPath {
         [string]$Path,
         [int]$Year
     )
-    # Remplace la derniere occurrence "_20xx" (annee) par "_$Year", en
-    # conservant le reste du chemin (version, sous-dossiers) inchange.
+    # Replaces the last "_20xx" (year) occurrence by "_$Year", leaving the
+    # rest of the path (version, sub-folders) unchanged.
     return [regex]::Replace($Path, "_20\d{2}(?!.*_20\d{2})", "_$Year")
 }
 
@@ -47,8 +45,8 @@ function Set-VersionInPath {
         [string]$Path,
         [string]$Version
     )
-    # Remplace toute occurrence d'un numero de version Exiobase (ex. 3.10.2)
-    # par la version demandee, en conservant le reste du chemin inchange.
+    # Replaces every Exiobase version number (e.g. 3.10.2) by the requested
+    # version, leaving the rest of the path unchanged.
     return [regex]::Replace($Path, "\d+\.\d+\.\d+", $Version)
 }
 
@@ -65,7 +63,7 @@ function Set-UpdateCalibFrSettings {
     $settings.path_out                = Set-YearInPath -Path $settings.path_out -Year $Year
 
     $json = $settings | ConvertTo-Json -Depth 10
-    # Ecriture en UTF-8 sans BOM pour eviter les erreurs de parsing JSON cote Python
+    # Written as UTF-8 without BOM to avoid JSON parsing errors on the Python side
     [System.IO.File]::WriteAllText($calibSettingsPath, $json, (New-Object System.Text.UTF8Encoding($false)))
 }
 
@@ -79,6 +77,6 @@ foreach ($year in $baseYears) {
     uv run python -m matmat.cli -p update_calib_fr -st $calibSettingsPath --no_confirm
 
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "Echec update_calib_fr pour base_year=$year (code $LASTEXITCODE)" -ForegroundColor Red
+        Write-Host "update_calib_fr failed for base_year=$year (code $LASTEXITCODE)" -ForegroundColor Red
     }
 }

@@ -1,18 +1,23 @@
 <#
-Enchaine l'etape engine pour chaque scenario SSP present dans
-data\4-PlaneFR\2-shocks\3-SSPs_2050, en adaptant les chemins (path_in.shock
-et path_out) dans settings_engine_SSPs.json avant chaque run.
+Chains the engine step for each SSP scenario present in
+data\4-PlaneFR\2-shocks\3-SSPs_2050, adapting the paths (path_in.shock
+and path_out) in settings_engine_SSPs.json before each run.
 
-path_in.accounts est conserve tel quel (ex. Outputs\World\Base_year_2019).
-Les sorties sont ecrites dans le dossier parent du path_out initial
-(ex. .\4-PlaneFR\Outputs\World\<scenario>).
+path_in.accounts is kept as is (e.g. Outputs\World\Base_year_2015): these are
+the base World accounts of the SSP scenarios. generate_shock_dS.py and
+generate_shock_agri.py read this same path to build the shocks
+(structure of the dS and dA, detail_levels, base_year); to change the base
+year, edit path_in.accounts in settings_engine_SSPs.json then rerun
+these scripts (run_all_SSPs.ps1).
+The outputs are written to the parent folder of the initial path_out
+(e.g. .\4-PlaneFR\Outputs\World\<scenario>).
 
--Suffix (ex. "_agri") : lit les chocs dans 3-SSPs_2050<Suffix> et garantit
-que chaque dossier de sortie se termine par <Suffix>.
+-Suffix (e.g. "_agri"): reads the shocks in 3-SSPs_2050<Suffix> and ensures
+that every output folder ends with <Suffix>.
 #>
 
 param(
-    # Suffixe des dossiers de chocs et de sortie ("" par defaut, ex. "_agri")
+    # Suffix of the shock and output folders ("" by default, e.g. "_agri")
     [string]$Suffix = ""
 )
 
@@ -23,21 +28,21 @@ $shocksDir          = Join-Path $projectDir "data\4-PlaneFR\2-shocks\3-SSPs_2050
 
 function Add-Suffix {
     param([string]$Name)
-    # Ajoute $Suffix au nom s'il ne s'y termine pas deja
+    # Appends $Suffix to the name unless it already ends with it
     if ($Name.EndsWith($Suffix)) { return $Name }
     return "$Name$Suffix"
 }
 
 Set-Location $projectDir
 
-# Dossier de sortie de base (ex. ".\4-PlaneFR\Outputs\World") : dossier
-# parent du path_out initial (".\4-PlaneFR\Outputs\World\<scenario>").
+# Base output folder (e.g. ".\4-PlaneFR\Outputs\World"): parent folder of the
+# initial path_out (".\4-PlaneFR\Outputs\World\<scenario>").
 $initialSettings  = Get-Content -Raw -Path $engineSettingsPath | ConvertFrom-Json
 $engineOutBaseDir = Split-Path -Parent $initialSettings.path_out
 
 function Set-EngineSettings {
     param(
-        # Nom du sous-dossier de scenario (ex. "SSP2_2050")
+        # Name of the scenario sub-folder (e.g. "SSP2_2050")
         [string]$ScenarioName
     )
 
@@ -47,11 +52,11 @@ function Set-EngineSettings {
     $settings.path_out      = Join-Path $engineOutBaseDir (Add-Suffix $ScenarioName)
 
     $json = $settings | ConvertTo-Json -Depth 10
-    # Ecriture en UTF-8 sans BOM pour eviter les erreurs de parsing JSON cote Python
+    # Written as UTF-8 without BOM to avoid JSON parsing errors on the Python side
     [System.IO.File]::WriteAllText($engineSettingsPath, $json, (New-Object System.Text.UTF8Encoding($false)))
 }
 
-# === Etape engine : un run par scenario present dans
+# === Engine step: one run per scenario present in
 # data\4-PlaneFR\2-shocks\3-SSPs_2050 ===
 
 $scenarios = Get-ChildItem -Path $shocksDir -Directory | Select-Object -ExpandProperty Name
@@ -64,6 +69,6 @@ foreach ($scenario in $scenarios) {
     uv run python -m matmat.cli -e eeio -st $engineSettingsPath --no_confirm
 
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "Echec engine pour $scenario (code $LASTEXITCODE)" -ForegroundColor Red
+        Write-Host "Engine failed for $scenario (code $LASTEXITCODE)" -ForegroundColor Red
     }
 }

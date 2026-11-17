@@ -1,12 +1,12 @@
 <#
-Lance plusieurs fois la commande exiobase3_eeio en faisant varier
-base_year et version dans le fichier de settings JSON.
+Runs the exiobase3_eeio command several times, varying
+base_year and version in the JSON settings file.
 
-La version Exiobase est passee en parametre (-Version, 3.11.2 par defaut).
+The Exiobase version is passed as a parameter (-Version, 3.11.2 by default).
 #>
 
 param(
-    # Version Exiobase a utiliser (ex. "3.11.2")
+    # Exiobase version to use (e.g. "3.11.2")
     [string]$Version = "3.11.2"
 )
 
@@ -30,7 +30,7 @@ function Set-JsonValueAndSave {
     $settings.path_out  = ".\4-PlaneFR\1-accounts\Exiobase\${Version}_${BaseYear}"
 
     $json = $settings | ConvertTo-Json -Depth 10
-    # Ecriture en UTF-8 sans BOM pour eviter les erreurs de parsing JSON cote Python
+    # Written as UTF-8 without BOM to avoid JSON parsing errors on the Python side
     [System.IO.File]::WriteAllText($settingsPath, $json, (New-Object System.Text.UTF8Encoding($false)))
 }
 
@@ -43,15 +43,15 @@ foreach ($baseYear in $baseYears) {
         uv run python -m matmat.cli -a exiobase3_eeio -st $settingsPath --no_confirm
 
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "Echec pour base_year=$baseYear / version=$version (code $LASTEXITCODE)" -ForegroundColor Red
+            Write-Host "Failed for base_year=$baseYear / version=$version (code $LASTEXITCODE)" -ForegroundColor Red
         }
     }
 }
 
-# à insérer si besoin
+# to be inserted if needed
 
-# Lance le moteur eeio (pour la version $Version), en adaptant
-# path_in et path_out a chaque base_year dans settings_engine_World.json.
+# Runs the eeio engine (for version $Version), adapting
+# path_in and path_out to each base_year in settings_engine_World.json.
 $engineSettingsPath = Join-Path $projectDir "data\4-PlaneFR\Settings\4-engine\settings_engine_World.json"
 $engineVersion = $Version
 
@@ -76,6 +76,6 @@ foreach ($baseYear in $baseYears) {
     uv run -m matmat.cli -e eeio -st $engineSettingsPath --no_confirm
 
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "Echec eeio pour base_year=$baseYear (code $LASTEXITCODE)" -ForegroundColor Red
+        Write-Host "eeio failed for base_year=$baseYear (code $LASTEXITCODE)" -ForegroundColor Red
     }
 }

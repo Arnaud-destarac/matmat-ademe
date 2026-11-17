@@ -1,34 +1,34 @@
 <#
-Enchaine l'etape engine (baseline + un run par couple accounts/scenario) en
-adaptant les chemins dans le fichier de settings JSON avant chaque run.
+Chains the engine step (baseline + one run per accounts/scenario pair) by
+adapting the paths in the JSON settings file before each run.
 
-Suppose que les etapes gmrio_to_snac_s et update_calib_fr ont deja ete
-executees au prealable (cf. run_calib_fr_batch.ps1 / run_update_calib_fr_batch.ps1
-/ run_update_calib_fr_batch_SSPs.ps1) et que leurs sorties sont disponibles.
+Assumes that the gmrio_to_snac_s and update_calib_fr steps have already been
+run beforehand (see run_calib_fr_batch.ps1 / run_update_calib_fr_batch.ps1
+/ run_update_calib_fr_batch_SSPs.ps1) and that their outputs are available.
 
-Les runs de scenario iterent sur chaque dossier d'accounts present dans
-data\4-PlaneFR\Outputs\France (hors dossiers contenant "2019") et sur chaque
-scenario de data\4-PlaneFR\2-shocks\1-transitions_2050. Les sorties sont
-ecrites dans Module_PlaneFR\data\<Version>\<groupe>\<scenario> (-Version,
-3.11.2 par defaut), avec <groupe> = "no_SSP" pour les accounts
-Base_year_2015, et le nom du dossier d'accounts sinon (ex. "SSP2_2050").
-La baseline Base_year_2015 est ecrite dans Module_PlaneFR\data\<Version>\no_SSP,
-puis copiee dans chaque autre groupe (SSP1_2050...) pour y servir de scenario
-de reference ; la baseline 2019 reste dans Module_PlaneFR\data\<Version>\2019_FR.
+The scenario runs iterate over each accounts folder present in
+data\4-PlaneFR\Outputs\France (except folders containing "2019") and over each
+scenario of data\4-PlaneFR\2-shocks\1-transitions_2050. The outputs are
+written to Module_PlaneFR\data\<Version>\<group>\<scenario> (-Version,
+3.11.2 by default), with <group> = "no_SSP" for the Base_year_2015 accounts,
+and the name of the accounts folder otherwise (e.g. "SSP2_2050").
+The Base_year_2015 baseline is written to Module_PlaneFR\data\<Version>\no_SSP,
+then copied into each other group (SSP1_2050...) to serve as the reference
+scenario there; the 2019 baseline stays in Module_PlaneFR\data\<Version>\2019_FR.
 
--Suffix (ex. "_agri") : lit les chocs dans 1-transitions_2050<Suffix> et les
-accounts dans Outputs\France<Suffix>, et garantit que chaque dossier de groupe
-et de scenario ecrit se termine par <Suffix>. Les accounts Base_year<Suffix>
-jouent alors le role de Base_year_2015 (groupe no_SSP<Suffix>), et la baseline
-de reference est le scenario Base_year<Suffix> de ces accounts
-(no_SSP<Suffix>\Base_year<Suffix>), copie dans chaque autre groupe. Les
-baselines 2015/2019 sans choc ne sont pas recalculees.
+-Suffix (e.g. "_agri"): reads the shocks in 1-transitions_2050<Suffix> and the
+accounts in Outputs\France<Suffix>, and ensures that every group and scenario
+folder written ends with <Suffix>. The Base_year<Suffix> accounts then play
+the role of Base_year_2015 (group no_SSP<Suffix>), and the reference baseline
+is the Base_year<Suffix> scenario of these accounts
+(no_SSP<Suffix>\Base_year<Suffix>), copied into each other group. The
+2015/2019 baselines without shock are not recomputed.
 #>
 
 param(
-    # Version Exiobase a utiliser (ex. "3.11.2")
+    # Exiobase version to use (e.g. "3.11.2")
     [string]$Version = "3.11.2",
-    # Suffixe des dossiers de chocs, d'accounts et de sortie ("" par defaut, ex. "_agri")
+    # Suffix of the shock, accounts and output folders ("" by default, e.g. "_agri")
     [string]$Suffix = ""
 )
 
@@ -39,39 +39,39 @@ $shocksDir          = Join-Path $projectDir "data\4-PlaneFR\2-shocks\1-transitio
 
 function Add-Suffix {
     param([string]$Name)
-    # Ajoute $Suffix au nom s'il ne s'y termine pas deja
+    # Appends $Suffix to the name unless it already ends with it
     if ($Name.EndsWith($Suffix)) { return $Name }
     return "$Name$Suffix"
 }
 
 Set-Location $projectDir
 
-# Dossier de sortie de base (ex. "...\Module_PlaneFR\data\3.11.2") : dossier
-# data du path_out initial ("...\data\<version>\<scenario>"), suivi de la
-# version demandee.
+# Base output folder (e.g. "...\Module_PlaneFR\data\3.11.2"): data folder of the
+# initial path_out ("...\data\<version>\<scenario>"), followed by the
+# requested version.
 $initialSettings = Get-Content -Raw -Path $engineSettingsPath | ConvertFrom-Json
-# Le path_out initial peut etre "...\data\<version>\<scenario>" ou, apres un
-# run de scenario, "...\data\<version>\<groupe>\<scenario>" : on coupe donc au
-# dossier de version plutot que de remonter d'un nombre fixe de niveaux.
+# The initial path_out can be "...\data\<version>\<scenario>" or, after a
+# scenario run, "...\data\<version>\<group>\<scenario>": we therefore cut at the
+# version folder rather than going up a fixed number of levels.
 $engineOutDataDir = [regex]::Replace($initialSettings.path_out, "\\\d+\.\d+\.\d+(\\.*)?$", "")
 $engineOutBaseDir = Join-Path $engineOutDataDir $Version
 
-# Dossier contenant les accounts France (ex. ".\4-PlaneFR\Outputs\France") :
-# fixe ici plutot que deduit du JSON, dont path_in.accounts change a chaque run
+# Folder containing the France accounts (e.g. ".\4-PlaneFR\Outputs\France"):
+# set here rather than deduced from the JSON, whose path_in.accounts changes at each run
 $accountsBaseDir = ".\4-PlaneFR\Outputs\France$Suffix"
 
-# Dossier d'accounts dont les sorties de scenario vont dans "no_SSP<Suffix>"
+# Accounts folder whose scenario outputs go to "no_SSP<Suffix>"
 $noSspAccountsName = if ($Suffix) { "Base_year$Suffix" } else { "Base_year_2015" }
 
-# Sortie baseline copiee dans chaque dossier de groupe (no_SSP, SSP1_2050...),
-# pour servir de scenario de reference aux figures de Module_PlaneFR. Avec
-# -Suffix, c'est le scenario de choc Base_year<Suffix> des accounts
-# $noSspAccountsName (pas de run baseline sans choc).
+# Baseline output copied into each group folder (no_SSP, SSP1_2050...), to
+# serve as the reference scenario of the Module_PlaneFR figures. With
+# -Suffix, it is the Base_year<Suffix> shock scenario of the
+# $noSspAccountsName accounts (no baseline run without shock).
 $referenceBaselineName = if ($Suffix) { "Base_year$Suffix" } else { "Base_year_2015" }
 
 function Get-ScenarioGroup {
     param(
-        # Nom du dossier d'accounts (ex. "Base_year_2015" ou "SSP2_2050")
+        # Name of the accounts folder (e.g. "Base_year_2015" or "SSP2_2050")
         [string]$AccountsName
     )
     if ($AccountsName -eq $noSspAccountsName) {
@@ -82,16 +82,15 @@ function Get-ScenarioGroup {
 
 function Set-EngineSettings {
     param(
-        # $null pour un run baseline (pas de choc), sinon nom du sous-dossier
-        # de scenario (ex. "S1_2050"). Pas de type [string] ici : PowerShell
-        # convertirait silencieusement un $null passe en argument en "",
-        # ce qui casserait le test $null -eq $ScenarioName ci-dessous.
+        # $null for a baseline run (no shock), otherwise name of the scenario
+        # sub-folder (e.g. "S1_2050"). No [string] type here: PowerShell
+        # would silently convert a $null passed as argument into "",
+        # which would break the $null -eq $ScenarioName test below.
         $ScenarioName,
-        # Annee de base des accounts (utilisee uniquement pour les runs
-        # baseline).
+        # Base year of the accounts (only used for baseline runs).
         [int]$Year = 2015,
-        # Nom du dossier d'accounts dans $accountsBaseDir (utilise uniquement
-        # pour les runs de scenario, ex. "Base_year_2015" ou "SSP2_2050").
+        # Name of the accounts folder in $accountsBaseDir (only used for
+        # scenario runs, e.g. "Base_year_2015" or "SSP2_2050").
         [string]$AccountsName = $noSspAccountsName
     )
 
@@ -106,8 +105,8 @@ function Set-EngineSettings {
             $settings.path_out = Join-Path $outBaseDir "2019_FR"
         }
         elseif ("Base_year_$Year" -eq $referenceBaselineName) {
-            # Baseline de reference : ecrite dans le groupe no_SSP, puis copiee
-            # dans les autres groupes (cf. fin de la boucle des scenarios)
+            # Reference baseline: written to the no_SSP group, then copied
+            # into the other groups (see end of the scenario loop)
             $settings.path_out = Join-Path (Join-Path $outBaseDir (Get-ScenarioGroup -AccountsName $noSspAccountsName)) "Base_year_$Year"
         }
         else {
@@ -122,18 +121,18 @@ function Set-EngineSettings {
     }
 
     $json = $settings | ConvertTo-Json -Depth 10
-    # Ecriture en UTF-8 sans BOM pour eviter les erreurs de parsing JSON cote Python
+    # Written as UTF-8 without BOM to avoid JSON parsing errors on the Python side
     [System.IO.File]::WriteAllText($engineSettingsPath, $json, (New-Object System.Text.UTF8Encoding($false)))
 }
 
-# === Etape engine : baseline 2015, baseline 2019, puis un run par couple
-# (dossier d'accounts de data\4-PlaneFR\Outputs\France hors "2019",
-# scenario de data\4-PlaneFR\2-shocks\1-transitions_2050) ===
+# === Engine step: 2015 baseline, 2019 baseline, then one run per pair
+# (accounts folder of data\4-PlaneFR\Outputs\France except "2019",
+# scenario of data\4-PlaneFR\2-shocks\1-transitions_2050) ===
 
 $baselineYears = if ($Suffix) { @() } else { 2015, 2019 }
 $scenarios    = Get-ChildItem -Path $shocksDir -Directory | Select-Object -ExpandProperty Name
-# Accounts no_SSP en premier : leur baseline de reference est copiee dans les
-# groupes suivants
+# no_SSP accounts first: their reference baseline is copied into the
+# following groups
 $accountsNames = Get-ChildItem -Path (Join-Path $projectDir "data\$accountsBaseDir") -Directory |
     Where-Object { $_.Name -notmatch "2019" } |
     Select-Object -ExpandProperty Name |
@@ -147,14 +146,14 @@ foreach ($year in $baselineYears) {
     uv run python -m matmat.cli -e eeio -st $engineSettingsPath --no_confirm
 
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "Echec engine pour baseline Base_year_$year (code $LASTEXITCODE)" -ForegroundColor Red
+        Write-Host "Engine failed for baseline Base_year_$year (code $LASTEXITCODE)" -ForegroundColor Red
     }
 }
 
 foreach ($accountsName in $accountsNames) {
     foreach ($scenario in $scenarios) {
-        # La baseline de reference de ce groupe est copiee depuis no_SSP<Suffix>
-        # (cf. ci-dessous) : inutile de la calculer
+        # The reference baseline of this group is copied from no_SSP<Suffix>
+        # (see below): no need to compute it
         if ($scenario -eq $referenceBaselineName -and $accountsName -ne $noSspAccountsName) {
             continue
         }
@@ -166,12 +165,12 @@ foreach ($accountsName in $accountsNames) {
         uv run python -m matmat.cli -e eeio -st $engineSettingsPath --no_confirm
 
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "Echec engine pour $accountsName / $scenario (code $LASTEXITCODE)" -ForegroundColor Red
+            Write-Host "Engine failed for $accountsName / $scenario (code $LASTEXITCODE)" -ForegroundColor Red
         }
     }
 
-    # === Copie de la baseline de reference (ecrite dans no_SSP) dans le
-    # dossier du groupe ===
+    # === Copy of the reference baseline (written to no_SSP) into the group
+    # folder ===
     $group = Get-ScenarioGroup -AccountsName $accountsName
     if ($accountsName -eq $noSspAccountsName) {
         continue
@@ -180,10 +179,10 @@ foreach ($accountsName in $accountsNames) {
     $groupCopy = Join-Path (Join-Path $engineOutBaseDir $group) $referenceBaselineName
 
     if (-not (Test-Path (Join-Path $baseline "extensions"))) {
-        Write-Host "Copie de $referenceBaselineName dans $group impossible : $baseline introuvable ou incomplet" -ForegroundColor Red
+        Write-Host "Cannot copy $referenceBaselineName into $group : $baseline not found or incomplete" -ForegroundColor Red
         continue
     }
-    Write-Host "--- $group : copie de $baseline ---" -ForegroundColor Cyan
+    Write-Host "--- $group : copy of $baseline ---" -ForegroundColor Cyan
     if (Test-Path $groupCopy) {
         Remove-Item -Path $groupCopy -Recurse -Force
     }

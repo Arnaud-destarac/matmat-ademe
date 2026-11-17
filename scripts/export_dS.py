@@ -1,15 +1,15 @@
 """
-Extrait les données de Base_year_2015 (system/x.pkl + extensions dom_*/F_x_dom.pkl
-et dom_*/F_Y_tot.pkl) vers un classeur Excel, une feuille par tableau.
+Extracts the data of Base_year_2015 (system/x.pkl + extensions dom_*/F_x_dom.pkl
+and dom_*/F_Y_tot.pkl) into an Excel workbook, one sheet per table.
 
-Feuilles produites :
-- "x" : x.pkl de Base_year_2015, transposé (secteurs en colonnes, comme F_x_dom),
-  avec une ligne supplémentaire par scénario 2050 (S1-S4, TEND) pour comparaison.
-  La colonne "scenario" indique le nom du dossier d'origine de chaque ligne.
-- "Fx_<lp>" : F_x_dom.pkl de chaque extension dom_* de Base_year_2015
-  (indicateurs en ligne, secteurs en colonne, format d'origine).
-- "FY_<lp>" : F_Y_tot.pkl de chaque extension dom_* de Base_year_2015, quand ce
-  fichier existe (absent pour ghg_combustion, ghg_emissions, raw_materials).
+Sheets produced:
+- "x": x.pkl of Base_year_2015, transposed (sectors as columns, like F_x_dom),
+  with one additional row per 2050 scenario (S1-S4, TEND) for comparison.
+  The "scenario" column gives the name of the source folder of each row.
+- "Fx_<lp>": F_x_dom.pkl of each dom_* extension of Base_year_2015
+  (indicators as rows, sectors as columns, original format).
+- "FY_<lp>": F_Y_tot.pkl of each dom_* extension of Base_year_2015, when this
+  file exists (missing for ghg_combustion, ghg_emissions, raw_materials).
 """
 
 import sys
@@ -31,9 +31,9 @@ OUTPUT_FILE = config.PROJECT_DIR / "data" / "S_extraction.xlsx"
 
 
 def load_x_row(scenario_folder):
-    """Charge system/x.pkl et le transpose en une ligne (secteurs en colonnes)."""
+    """Loads system/x.pkl and transposes it into a row (sectors as columns)."""
     x = pd.read_pickle(scenario_folder / "system" / "x.pkl")
-    return x.iloc[:, 0]  # Series indexée par (origin, region, category, sub_category, sector)
+    return x.iloc[:, 0]  # Series indexed by (origin, region, category, sub_category, sector)
 
 
 def build_x_sheet():
@@ -45,7 +45,7 @@ def build_x_sheet():
 
 
 def get_dom_extension_names(scenario_folder):
-    """Noms des sous-processus (lp) ayant un dossier d'extensions dom_<lp>."""
+    """Names of the sub-processes (lp) having a dom_<lp> extension folder."""
     ext_dir = scenario_folder / "extensions"
     return sorted(
         p.name[len("dom_"):]
@@ -69,15 +69,15 @@ def main():
             if f_x_dom_path.exists():
                 pd.read_pickle(f_x_dom_path).to_excel(writer, sheet_name=sheet_name("Fx", lp_name))
             else:
-                print(f"[info] F_x_dom.pkl absent pour {lp_name}, feuille non créée.")
+                print(f"[info] F_x_dom.pkl missing for {lp_name}, sheet not created.")
 
             f_y_tot_path = ext_dir / "F_Y_tot.pkl"
             if f_y_tot_path.exists():
                 pd.read_pickle(f_y_tot_path).to_excel(writer, sheet_name=sheet_name("FY", lp_name))
             else:
-                print(f"[info] F_Y_tot.pkl absent pour {lp_name}, feuille non créée.")
+                print(f"[info] F_Y_tot.pkl missing for {lp_name}, sheet not created.")
 
-    print(f"Classeur écrit : {OUTPUT_FILE}")
+    print(f"Workbook written: {OUTPUT_FILE}")
 
 
 if __name__ == "__main__":

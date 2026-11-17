@@ -1,19 +1,22 @@
 <#
-Enchaine l'etape gmrio_to_snac_s pour chaque annee de base (2015, 2019),
-pour la version d'Exiobase passee en parametre (-Version, 3.11.2 par
-defaut), en adaptant les chemins (annee, version) dans le fichier de
-settings JSON avant chaque run.
+Chains the gmrio_to_snac_s step for each base year (2015, 2019),
+for the Exiobase version passed as a parameter (-Version, 3.11.2 by
+default), adapting the paths (year, version) in the JSON settings file
+before each run.
 
-Recree ensuite les sous-dossiers "extensions" de chaque scenario de
-data\4-PlaneFR\2-shocks\1-transitions_2050 (dom_<ext> pour chaque
-extension_name de gmrio_to_snac_s, avec detail_levels.xlsx et info.json).
+Then rebuilds the "extensions" sub-folders of each scenario of
+data\4-PlaneFR\2-shocks\1-transitions_2050 (dom_<ext> for each
+extension_name of gmrio_to_snac_s, with detail_levels.xlsx and info.json).
+The dS_x_dom shocks already present (compute_ds_x_dom.py) are kept, so
+that the engine applies them from the first pass (see
+rebuild_shock_extensions.py).
 
-A executer depuis l'environnement matmat-ademe (pipeline porte dans
+To be run from the matmat-ademe environment (pipeline carried in
 src/matmat/workflows/pipelines/accounts/gmrio_to_snac_s).
 #>
 
 param(
-    # Version Exiobase a utiliser (ex. "3.11.2")
+    # Exiobase version to use (e.g. "3.11.2")
     [string]$Version = "3.11.2"
 )
 
@@ -31,9 +34,9 @@ function Set-YearInPath {
         [string]$Path,
         [int]$Year
     )
-    # Remplace toutes les occurrences "_20xx" (annee) par "_$Year", pour que
-    # le dossier version_annee et le sous-dossier version_pxp_annee restent
-    # coherents entre eux.
+    # Replaces every "_20xx" (year) occurrence by "_$Year", so that the
+    # version_year folder and the version_pxp_year sub-folder stay
+    # consistent with each other.
     return [regex]::Replace($Path, "_20\d{2}", "_$Year")
 }
 
@@ -42,9 +45,9 @@ function Set-VersionInPath {
         [string]$Path,
         [string]$Version
     )
-    # Remplace toute occurrence d'un numero de version Exiobase (ex. 3.10.2,
-    # 3.9.6) par la version demandee, en conservant le reste du chemin
-    # (annee, sous-dossiers) inchange.
+    # Replaces every Exiobase version number (e.g. 3.10.2, 3.9.6) by the
+    # requested version, leaving the rest of the path (year, sub-folders)
+    # unchanged.
     return [regex]::Replace($Path, "\d+\.\d+\.\d+", $Version)
 }
 
@@ -62,7 +65,7 @@ function Set-GmrioToSnacSSettings {
     $settings.path_out          = Set-VersionInPath -Path $settings.path_out -Version $Version
 
     $json = $settings | ConvertTo-Json -Depth 10
-    # Ecriture en UTF-8 sans BOM pour eviter les erreurs de parsing JSON cote Python
+    # Written as UTF-8 without BOM to avoid JSON parsing errors on the Python side
     [System.IO.File]::WriteAllText($gmrioSettingsPath, $json, (New-Object System.Text.UTF8Encoding($false)))
 }
 
@@ -75,22 +78,22 @@ foreach ($year in $baseYears) {
         uv run python -m matmat.cli -p gmrio_to_snac_s -st $gmrioSettingsPath --no_confirm
 
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "Echec gmrio_to_snac_s pour base_year=$year / version=$version (code $LASTEXITCODE)" -ForegroundColor Red
+            Write-Host "gmrio_to_snac_s failed for base_year=$year / version=$version (code $LASTEXITCODE)" -ForegroundColor Red
         }
     }
 }
 
-# === Reconstruction des dossiers "extensions" des scenarios de chocs ===
-# Pour chaque scenario de $shocksDir, supprime le sous-dossier "extensions"
-# puis le recree avec un dossier dom_<ext> par extension_name de
-# gmrio_to_snac_s, contenant le detail_levels.xlsx et l'info.json
-# correspondants (cf. rebuild_shock_extensions.py). La sortie gmrio_to_snac_s
-# utilisee est celle de la base_year du scenario (system\info.json) et de la
-# version $Version.
+# === Rebuilding the "extensions" folders of the shock scenarios ===
+# For each scenario of $shocksDir, empties the "extensions" sub-folder (keeping
+# the dS_x_dom) then recreates it with one dom_<ext> folder per extension_name of
+# gmrio_to_snac_s, containing the matching detail_levels.xlsx and info.json
+# (see rebuild_shock_extensions.py). The gmrio_to_snac_s output used is
+# that of the base_year of the scenario (system\info.json) and of the
+# $Version version.
 $shocksDir = Join-Path $projectDir "data\4-PlaneFR\2-shocks\1-transitions_2050"
 $dataDir   = Join-Path $projectDir "data"
 
-Write-Host "=== Reconstruction des extensions des chocs ($shocksDir) ===" -ForegroundColor Cyan
+Write-Host "=== Rebuilding the shock extensions ($shocksDir) ===" -ForegroundColor Cyan
 
 $settings       = Get-Content -Raw -Path $gmrioSettingsPath | ConvertFrom-Json
 $extensionNames = @($settings.extension_names)
@@ -99,7 +102,7 @@ $failed         = $false
 foreach ($scenarioDir in Get-ChildItem -Path $shocksDir -Directory) {
     $systemInfoPath = Join-Path $scenarioDir.FullName "system\info.json"
     if (-not (Test-Path $systemInfoPath)) {
-        Write-Host "Scenario $($scenarioDir.Name) ignore : $systemInfoPath introuvable" -ForegroundColor Yellow
+        Write-Host "Scenario $($scenarioDir.Name) skipped: $systemInfoPath not found" -ForegroundColor Yellow
         continue
     }
     $baseYear = [int](Get-Content -Raw -Path $systemInfoPath | ConvertFrom-Json).base_year
@@ -109,24 +112,20 @@ foreach ($scenarioDir in Get-ChildItem -Path $shocksDir -Directory) {
         -not (Test-Path (Join-Path $gmrioOutDir "extensions\dom_$_\detail_levels.xlsx"))
     }
     if ($missing) {
-        # On ne supprime rien si la sortie gmrio_to_snac_s est incomplete
-        Write-Host "Scenario $($scenarioDir.Name) ignore : extensions absentes de $gmrioOutDir : $($missing -join ', ')" -ForegroundColor Red
+        # Nothing is deleted if the gmrio_to_snac_s output is incomplete
+        Write-Host "Scenario $($scenarioDir.Name) skipped: extensions missing from $gmrioOutDir : $($missing -join ', ')" -ForegroundColor Red
         $failed = $true
         continue
     }
 
-    $extensionsDir = Join-Path $scenarioDir.FullName "extensions"
-    if (Test-Path $extensionsDir) {
-        Remove-Item -Path $extensionsDir -Recurse -Force
-    }
-
+    # The cleaning of the extensions folder (except dS_*) is done by the Python script
     uv run python (Join-Path $PSScriptRoot "rebuild_shock_extensions.py") `
         --scenario-dir $scenarioDir.FullName `
         --gmrio-dir $gmrioOutDir `
         --extensions $extensionNames
 
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "Echec de la reconstruction des extensions pour $($scenarioDir.Name) (code $LASTEXITCODE)" -ForegroundColor Red
+        Write-Host "Rebuilding the extensions failed for $($scenarioDir.Name) (code $LASTEXITCODE)" -ForegroundColor Red
         $failed = $true
     }
 }

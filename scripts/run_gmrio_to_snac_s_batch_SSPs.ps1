@@ -1,32 +1,32 @@
 <#
-Enchaine l'etape gmrio_to_snac_s pour chaque scenario SSP present dans
-data\4-PlaneFR\2-shocks\3-SSPs_2050, en adaptant les chemins (scenario)
-dans gmrio_to_snac_S_SSPs.json avant chaque run.
+Chains the gmrio_to_snac_s step for each SSP scenario present in
+data\4-PlaneFR\2-shocks\3-SSPs_2050, adapting the paths (scenario)
+in gmrio_to_snac_S_SSPs.json before each run.
 
-Suppose que l'etape engine a deja ete executee pour ces scenarios
-(cf. run_engine_batch_SSPs.ps1) : path_in.accounts pointe vers
+Assumes that the engine step has already been run for these scenarios
+(see run_engine_batch_SSPs.ps1): path_in.accounts points to
 .\4-PlaneFR\Outputs\World\<scenario>.
 
-Les sorties sont ecrites dans
-.\4-PlaneFR\Outputs_inter\gmrio_to_snac_s\SSPs\<scenario>, puis leurs
-F_x_dom sont remplaces par ceux de la sortie de reference
+The outputs are written to
+.\4-PlaneFR\Outputs_inter\gmrio_to_snac_s\SSPs\<scenario>, then their
+F_x_dom are replaced by those of the reference output
 (SSPs\$referenceScenarioName).
 
-A executer depuis l'environnement matmat-ademe (pipeline porte dans
+To be run from the matmat-ademe environment (pipeline carried in
 src/matmat/workflows/pipelines/accounts/gmrio_to_snac_s).
 
--Suffix (ex. "_agri") : lit les chocs dans 3-SSPs_2050<Suffix>, les accounts
-dans Outputs\World\<scenario><Suffix> et ecrit dans SSPs<Suffix>\<scenario><Suffix>.
-La sortie de reference (F_x_dom) est lue dans SSPs<Suffix>\<ReferenceScenarioName> :
-si ce scenario fait partie des chocs (ex. Base_year_agri), il est traite en
-premier et ses F_x_dom ne sont pas remplaces.
+-Suffix (e.g. "_agri"): reads the shocks in 3-SSPs_2050<Suffix>, the accounts
+in Outputs\World\<scenario><Suffix> and writes to SSPs<Suffix>\<scenario><Suffix>.
+The reference output (F_x_dom) is read in SSPs<Suffix>\<ReferenceScenarioName>:
+if this scenario is one of the shocks (e.g. Base_year_agri), it is processed
+first and its F_x_dom are not replaced.
 #>
 
 param(
-    # Suffixe des dossiers de chocs et de sortie ("" par defaut, ex. "_agri")
+    # Suffix of the shock and output folders ("" by default, e.g. "_agri")
     [string]$Suffix = "",
-    # Sortie gmrio_to_snac_s de reference dont les F_x_dom sont recopies dans
-    # chaque scenario (les intensites domestiques France ne sont pas choquees)
+    # Reference gmrio_to_snac_s output whose F_x_dom are copied into each
+    # scenario (the French domestic intensities are not shocked)
     [string]$ReferenceScenarioName = "Base_year_2015"
 )
 
@@ -37,27 +37,27 @@ $shocksDir         = Join-Path $projectDir "data\4-PlaneFR\2-shocks\3-SSPs_2050$
 
 function Add-Suffix {
     param([string]$Name)
-    # Ajoute $Suffix au nom s'il ne s'y termine pas deja
+    # Appends $Suffix to the name unless it already ends with it
     if ($Name.EndsWith($Suffix)) { return $Name }
     return "$Name$Suffix"
 }
 
 Set-Location $projectDir
 
-# Decomposition des chemins initiaux :
-# - accounts : "...\Outputs\World\<scenario>" -> dossier parent
-# - path_out : "...\SSPs<suffixe>\<scenario>" -> dossier parent, ramene a
-#   "...\SSPs" (le JSON garde le dernier chemin utilise, suffixe ou non)
+# Decomposition of the initial paths:
+# - accounts: "...\Outputs\World\<scenario>" -> parent folder
+# - path_out: "...\SSPs<suffix>\<scenario>" -> parent folder, brought back to
+#   "...\SSPs" (the JSON keeps the last path used, with or without suffix)
 $initialSettings = Get-Content -Raw -Path $gmrioSettingsPath | ConvertFrom-Json
 $accountsBaseDir = Split-Path -Parent $initialSettings.path_in.accounts
 $gmrioOutBaseDir = [regex]::Replace((Split-Path -Parent $initialSettings.path_out), "_agri$", "") + $Suffix
 
-# Les chemins des settings sont relatifs au dossier data
+# The paths of the settings are relative to the data folder
 $dataDir = Join-Path $projectDir "data"
 
 function Set-GmrioToSnacSSettings {
     param(
-        # Nom du sous-dossier de scenario (ex. "SSP2_2050")
+        # Name of the scenario sub-folder (e.g. "SSP2_2050")
         [string]$ScenarioName
     )
 
@@ -67,14 +67,14 @@ function Set-GmrioToSnacSSettings {
     $settings.path_out         = Join-Path $gmrioOutBaseDir (Add-Suffix $ScenarioName)
 
     $json = $settings | ConvertTo-Json -Depth 10
-    # Ecriture en UTF-8 sans BOM pour eviter les erreurs de parsing JSON cote Python
+    # Written as UTF-8 without BOM to avoid JSON parsing errors on the Python side
     [System.IO.File]::WriteAllText($gmrioSettingsPath, $json, (New-Object System.Text.UTF8Encoding($false)))
 }
 
-# === Etape gmrio_to_snac_s : un run par scenario present dans
+# === gmrio_to_snac_s step: one run per scenario present in
 # data\4-PlaneFR\2-shocks\3-SSPs_2050 ===
 
-# Scenario de reference en premier : ses F_x_dom servent aux suivants
+# Reference scenario first: its F_x_dom are used by the following ones
 $scenarios = Get-ChildItem -Path $shocksDir -Directory | Select-Object -ExpandProperty Name |
     Sort-Object { (Add-Suffix $_) -ne $ReferenceScenarioName }, { $_ }
 $failed    = $false
@@ -87,12 +87,12 @@ foreach ($scenario in $scenarios) {
     uv run python -m matmat.cli -p gmrio_to_snac_s -st $gmrioSettingsPath --no_confirm
 
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "Echec gmrio_to_snac_s pour $scenario (code $LASTEXITCODE)" -ForegroundColor Red
+        Write-Host "gmrio_to_snac_s failed for $scenario (code $LASTEXITCODE)" -ForegroundColor Red
         $failed = $true
         continue
     }
 
-    # === Remplacement des F_x_dom par ceux de la sortie de reference ===
+    # === Replacement of the F_x_dom by those of the reference output ===
     if ((Add-Suffix $scenario) -eq $ReferenceScenarioName) {
         continue
     }
@@ -100,13 +100,13 @@ foreach ($scenario in $scenarios) {
     $scenDir  = Join-Path $dataDir (Join-Path $gmrioOutBaseDir (Add-Suffix $scenario))
     $settings = Get-Content -Raw -Path $gmrioSettingsPath | ConvertFrom-Json
 
-    Write-Host "--- $scenario : remplacement des F_x_dom par ceux de $refDir ---" -ForegroundColor Cyan
+    Write-Host "--- $scenario : replacing the F_x_dom by those of $refDir ---" -ForegroundColor Cyan
 
     foreach ($ext in @($settings.extension_names)) {
         $src = Join-Path $refDir  "extensions\dom_$ext\F_x_dom.pkl"
         $dst = Join-Path $scenDir "extensions\dom_$ext\F_x_dom.pkl"
         if (-not (Test-Path $src)) {
-            Write-Host "F_x_dom de reference introuvable : $src" -ForegroundColor Red
+            Write-Host "Reference F_x_dom not found: $src" -ForegroundColor Red
             $failed = $true
             continue
         }

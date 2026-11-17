@@ -1,49 +1,48 @@
 <#
-Enchaine l'etape update_calib_fr pour chaque scenario present dans
-data\4-PlaneFR\Outputs_inter\gmrio_to_snac_s\SSPs (sorties gmrio_to_snac_s,
-cf. run_gmrio_to_snac_s_batch_SSPs.ps1), en adaptant les chemins dans le
-fichier de settings JSON avant chaque run :
-- newer_accounts : dossier du scenario s'il contient directement system\
-  (ex. Base_year_2015), sinon son sous-dossier <Version>_pxp_<annee>
-  (ex. SSP1_2050\3.11.2_pxp_2019) ;
-- older_accounts : annee remplacee par la base_year du scenario (lue dans
-  system\info.json), ex. 3.10.2_France_2015 ou 3.10.2_France_2019 ;
-- path_out : .\4-PlaneFR\Outputs\France\<scenario>.
+Chains the update_calib_fr step for each scenario present in
+data\4-PlaneFR\Outputs_inter\gmrio_to_snac_s\SSPs (gmrio_to_snac_s outputs,
+see run_gmrio_to_snac_s_batch_SSPs.ps1), adapting the paths in the JSON
+settings file before each run:
+- newer_accounts: scenario folder if it directly contains system\
+  (e.g. Base_year_2015), otherwise its <Version>_pxp_<year> sub-folder
+  (e.g. SSP1_2050\3.11.2_pxp_2019);
+- older_accounts: year replaced by the base_year of the scenario (read in
+  system\info.json), e.g. 3.10.2_France_2015 or 3.10.2_France_2019;
+- path_out: .\4-PlaneFR\Outputs\France\<scenario>.
 
-Le pipeline "update_calib_fr" n'est pas (encore) porte dans matmat-ademe
-(src/matmat/workflows/pipelines/accounts/ ne contient que "aggregation" et
-"gmrio_to_snac_s" ; -p update_calib_fr n'existe pas dans son cli.py). Il
-n'existe que dans l'ancien wheel installe pour le projet datapack
-(matmat==0.9.0b0). Ce script edite donc le fichier de settings situe dans
-matmat-ademe, mais lance la commande depuis le dossier datapack (frere de
-matmat-ademe), pour utiliser son environnement/CLI.
+The "update_calib_fr" pipeline is not (yet) ported to matmat-ademe
+(src/matmat/workflows/pipelines/accounts/ only contains "aggregation" and
+"gmrio_to_snac_s"; -p update_calib_fr does not exist in its cli.py). It only
+exists in the old wheel installed for the datapack project
+(matmat==0.9.0b0). This script therefore edits the settings file located in
+matmat-ademe, but runs the command from the datapack folder (sibling of
+matmat-ademe), to use its environment/CLI.
 
--Suffix (ex. "_agri") : lit Outputs_inter\gmrio_to_snac_s\SSPs<Suffix> et
-ecrit dans Outputs\France<Suffix>.
+-Suffix (e.g. "_agri"): reads Outputs_inter\gmrio_to_snac_s\SSPs<Suffix> and
+writes to Outputs\France<Suffix>.
 #>
 
 param(
-    # Version Exiobase a utiliser (ex. "3.11.2") : selectionne le
-    # sous-dossier <Version>_pxp_<annee> des scenarios qui en ont un
+    # Exiobase version to use (e.g. "3.11.2"): selects the
+    # <Version>_pxp_<year> sub-folder of the scenarios that have one
     [string]$Version = "3.11.2",
-    # Suffixe des dossiers d'entree et de sortie ("" par defaut, ex. "_agri")
+    # Suffix of the input and output folders ("" by default, e.g. "_agri")
     [string]$Suffix = ""
 )
 
-# Chemins calcules relativement a l'emplacement de ce script, pour que le
-# script fonctionne quel que soit le repertoire courant depuis lequel il est
-# invoque.
+# Paths computed relative to the location of this script, so that the
+# script works whatever the current directory it is invoked from.
 $matmatAdemeDir = Split-Path -Parent $PSScriptRoot
 $matmatRootDir  = Split-Path -Parent $matmatAdemeDir
 $datapackDir    = Join-Path $matmatRootDir "datapack"
 
 $calibSettingsPath = Join-Path $matmatAdemeDir "data\4-PlaneFR\Settings\3-update_calib_fr\update_calib_fr_PlaneFR_SSPs.json"
 
-# Les chemins des settings sont relatifs au dossier data
+# The paths of the settings are relative to the data folder
 $dataDir = Join-Path $matmatAdemeDir "data"
 
-# Chemins (relatifs a data) des sorties gmrio_to_snac_s par scenario et des
-# sorties update_calib_fr
+# Paths (relative to data) of the gmrio_to_snac_s outputs by scenario and of the
+# update_calib_fr outputs
 $newerBaseDir = ".\4-PlaneFR\Outputs_inter\gmrio_to_snac_s\SSPs$Suffix"
 $outBaseDir   = ".\4-PlaneFR\Outputs\France$Suffix"
 
@@ -52,20 +51,20 @@ function Set-YearInPath {
         [string]$Path,
         [int]$Year
     )
-    # Remplace la derniere occurrence "_20xx" (annee) par "_$Year", en
-    # conservant le reste du chemin (version, sous-dossiers) inchange.
+    # Replaces the last "_20xx" (year) occurrence by "_$Year", leaving the
+    # rest of the path (version, sub-folders) unchanged.
     return [regex]::Replace($Path, "_20\d{2}(?!.*_20\d{2})", "_$Year")
 }
 
 function Get-NewerAccountsDir {
     param(
-        # Dossier du scenario (chemin absolu)
+        # Scenario folder (absolute path)
         [string]$ScenarioDir
     )
-    # Renvoie le chemin relatif (au dossier du scenario) des comptes
-    # gmrio_to_snac_s : "" si system\ est directement dans le scenario, sinon
-    # le sous-dossier <Version>_pxp_<annee> qui contient system\. $null si
-    # aucun n'est trouve.
+    # Returns the path (relative to the scenario folder) of the
+    # gmrio_to_snac_s accounts: "" if system\ is directly in the scenario,
+    # otherwise the <Version>_pxp_<year> sub-folder containing system\. $null if
+    # none is found.
     if (Test-Path (Join-Path $ScenarioDir "system\info.json")) {
         return ""
     }
@@ -92,11 +91,11 @@ function Set-UpdateCalibFrSettings {
     $settings.path_out               = $PathOut
 
     $json = $settings | ConvertTo-Json -Depth 10
-    # Ecriture en UTF-8 sans BOM pour eviter les erreurs de parsing JSON cote Python
+    # Written as UTF-8 without BOM to avoid JSON parsing errors on the Python side
     [System.IO.File]::WriteAllText($calibSettingsPath, $json, (New-Object System.Text.UTF8Encoding($false)))
 }
 
-# === Etape update_calib_fr : un run par scenario present dans
+# === update_calib_fr step: one run per scenario present in
 # data\4-PlaneFR\Outputs_inter\gmrio_to_snac_s\SSPs ===
 
 $scenarioDirs = Get-ChildItem -Path (Join-Path $dataDir $newerBaseDir) -Directory
@@ -108,7 +107,7 @@ foreach ($scenarioDir in $scenarioDirs) {
 
     $sub = Get-NewerAccountsDir -ScenarioDir $scenarioDir.FullName
     if ($null -eq $sub) {
-        Write-Host "Scenario $scenario ignore : aucun system\info.json (ni dans un sous-dossier $($Version)_pxp_*)" -ForegroundColor Yellow
+        Write-Host "Scenario $scenario skipped: no system\info.json (nor in a $($Version)_pxp_* sub-folder)" -ForegroundColor Yellow
         continue
     }
 
@@ -127,6 +126,6 @@ foreach ($scenarioDir in $scenarioDirs) {
     uv run python -m matmat.cli -p update_calib_fr -st $calibSettingsPath --no_confirm
 
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "Echec update_calib_fr pour $scenario (code $LASTEXITCODE)" -ForegroundColor Red
+        Write-Host "update_calib_fr failed for $scenario (code $LASTEXITCODE)" -ForegroundColor Red
     }
 }

@@ -1,5 +1,5 @@
 <#
-Enchaine la fin du pipeline PlaneFR (a partir de l'etape engine) :
+Chains the end of the PlaneFR pipeline (from the engine step onwards):
     3. engine             (matmat-ademe)
     4. extract_f_y_tot    (matmat-ademe)
     5. reformat_d_cba_monde_europe (matmat-ademe)
@@ -7,28 +7,28 @@ Enchaine la fin du pipeline PlaneFR (a partir de l'etape engine) :
     7. export_dS
     8. compute_ds_x_dom
 
-Chaque etape est deleguee au script dedie (run_engine_batch.ps1) ou lancee
-directement pour les scripts Python (etapes 4 a 6). Toutes les etapes
-tournent depuis matmat-ademe. Les chemins sont calcules relativement a
-l'emplacement de ce script, pour fonctionner quel que soit le repertoire
-courant depuis lequel il est invoque.
+Each step is delegated to the dedicated script (run_engine_batch.ps1) or
+launched directly for the Python scripts (steps 4 to 8). All the steps
+run from matmat-ademe. The paths are computed relative to the location of this
+script, so that it works whatever the current directory it is invoked from.
 
-Les etapes 5 (ajout de F_Y_tot France) et 6 traitent tous les scenarios de Module_PlaneFR/data/<version>,
-qu'ils soient directement sous data/<version>/<scenario> ou imbriques par SSP
-(data/<version>/<SSP>/<scenario>, ex. no_SSP/S1_2050, SSP1_2050/TEND_2050).
+Steps 5 (addition of the France F_Y_tot) and 6 process all the scenarios of
+Module_PlaneFR/data/<version>, whether directly under
+data/<version>/<scenario> or nested by SSP
+(data/<version>/<SSP>/<scenario>, e.g. no_SSP/S1_2050, SSP1_2050/TEND_2050).
 
-S'arrete au premier echec (code de sortie non nul) pour eviter d'enchainer
-des etapes sur des donnees incompletes.
+Stops at the first failure (non-zero exit code) to avoid chaining steps on
+incomplete data.
 
-La version Exiobase est passee en parametre (-Version, 3.11.2 par defaut) :
-elle est transmise a run_engine_batch.ps1 (qui la reporte dans le fichier de
-settings) et aux scripts Python via la variable d'environnement
+The Exiobase version is passed as a parameter (-Version, 3.11.2 by default):
+it is forwarded to run_engine_batch.ps1 (which writes it into the settings
+file) and to the Python scripts through the environment variable
 PLANEFR_EXIOBASE_VERSION.
-    Exemple : .\run_pipeline_from_engine.ps1 -Version 3.11.2
+    Example: .\run_pipeline_from_engine.ps1 -Version 3.11.2
 #>
 
 param(
-    # Version Exiobase a utiliser (ex. "3.11.2")
+    # Exiobase version to use (e.g. "3.11.2")
     [string]$Version = "3.11.2"
 )
 
@@ -48,7 +48,7 @@ function Invoke-Stage {
     & $Action
 
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "Pipeline interrompu : echec de l'etape '$Name' (code $LASTEXITCODE)" -ForegroundColor Red
+        Write-Host "Pipeline interrupted: step '$Name' failed (code $LASTEXITCODE)" -ForegroundColor Red
         exit $LASTEXITCODE
     }
 }
@@ -82,4 +82,4 @@ Invoke-Stage "8. compute_ds_x_dom" {
     uv run python (Join-Path $scriptsDir "compute_ds_x_dom.py")
 }
 
-Write-Host "`nPipeline complet termine avec succes (version $Version)." -ForegroundColor Green
+Write-Host "`nFull pipeline completed successfully (version $Version)." -ForegroundColor Green

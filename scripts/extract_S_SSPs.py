@@ -1,44 +1,44 @@
 """
-Extrait, pour chaque scénario IMAGE de data/SSP/Scenarios, les facteurs F, x et S
-2050/2020 par région, et les écrit dans Matching_extensions_EXIOBASE_IMAGE.xlsx,
-une feuille par scénario (feuille effacée puis recréée si elle existe déjà).
+Extracts, for each IMAGE scenario of data/SSP/Scenarios, the F, x and S
+2050/2020 factors by region, and writes them into Matching_extensions_EXIOBASE_IMAGE.xlsx,
+one sheet per scenario (sheet deleted then recreated if it already exists).
 
-Pour chaque ligne de la feuille "Matching" :
-- F 2050/2020 : ratio 2050/2020 de la formule "Numérateur F", évaluée séparément
-  en 2020 et en 2050. La formule combine des variables IMAGE avec les opérateurs
-  "+", "-" (ou "−"), "x", "/", des nombres et des parenthèses ; les parenthèses
-  placées après une variable sont des unités et sont ignorées, ex.
+For each row of the "Matching" sheet:
+- F 2050/2020: 2050/2020 ratio of the "F (IMAGE)" formula, evaluated separately
+  in 2020 and in 2050. The formula combines IMAGE variables with the operators
+  "+", "-" (or "−"), "x", "/", numbers and parentheses; the parentheses placed
+  after a variable are units and are ignored, e.g.
   "iNH3_volatization_arable (kgN/an) x (1 − Land Cover|Cropland|Energy Crops / Land Cover|Cropland)".
-  "max (A, B)" / "min (A, B)" s'appliquent année par année (ex. plancher à 0).
-  "A OU B" (priorité la plus faible) vaut A, sauf si A est négatif en 2020 ou en
-  2050 pour la région, auquel cas B est utilisé (ex. P - agriculture - soil/water).
-  Chaque variable est lue dans Nutrients.xlsx (scénario "PB_<scénario>") pour le
-  domaine Nutrients, dans le csv du scénario sinon ; si elle est absente de cette
-  source, elle est lue dans l'autre (ex. iNH3_volatization_* du domaine
-  Air_emissions, Land Cover|* dans les lignes du domaine Nutrients).
-- x 2050/2020 : ratio de la formule "Dénominateur x" (csv du scénario).
-- S 2050/2020 : F/x ; si le numérateur est de la forme "1 / <formule>" (rendements),
-  F est le ratio de 1 / <formule>, soit S ; 1 si F ou x n'est pas calculable.
-  S vaut aussi 1 quand l'intensité 2020 de la région (F/x) est négligeable devant celle
-  du Monde (moins de MIN_RELATIVE_INTENSITY fois) : le ratio 2050/2020 d'une valeur
-  2020 quasi nulle n'a pas de sens (ex. charbon dans le tertiaire indonésien,
-  F 2020 ~ 1e-26 x Monde -> S ~ 1e15), et ces facteurs, appliqués aux coefficients de
-  A par generate_shock_dS.py, rendent la matrice de Leontief inutilisable.
-- Si un rendement "Yield|..." manque dans le scénario (ex. Yield|Oilcrops dans SSP1),
-  la ligne reprend les variables F et x de la ligne "Cropland".
+  "max (A, B)" / "min (A, B)" apply year by year (e.g. floor at 0).
+  "A OU B" / "A OR B" (lowest precedence) is A, unless A is negative in 2020 or
+  in 2050 for the region, in which case B is used (e.g. P - agriculture - soil/water).
+  Each variable is read in Nutrients.xlsx (scenario "PB_<scenario>") for the
+  Nutrients group, in the csv of the scenario otherwise; if it is missing from
+  this source, it is read in the other one (e.g. iNH3_volatization_* of the
+  Air_emissions group, Land Cover|* in the rows of the Nutrients group).
+- x 2050/2020: ratio of the "x (IMAGE)" formula (csv of the scenario).
+- S 2050/2020: F/x; if the numerator has the form "1 / <formula>" (yields),
+  F is the ratio of 1 / <formula>, i.e. S; 1 if F or x cannot be computed.
+  S is also 1 when the 2020 intensity of the region (F/x) is negligible compared
+  with that of the World (less than MIN_RELATIVE_INTENSITY times): the 2050/2020
+  ratio of an almost-zero 2020 value makes no sense (e.g. coal in Indonesian
+  services, F 2020 ~ 1e-26 x World -> S ~ 1e15), and these factors, applied to
+  the coefficients of A by generate_shock_dS.py, make the Leontief matrix unusable.
+- If a "Yield|..." yield is missing from the scenario (e.g. Yield|Oilcrops in
+  SSP1), the row takes the F and x variables of the "Cropland" row.
 
-Baseline commune : les valeurs 2020 de toutes les variables (csv et Nutrients.xlsx)
-sont celles du scénario BASELINE_SCENARIO (SSP2) ; seules les valeurs 2050 sont
-propres à chaque scénario. Une variable absente de SSP2 garde sa valeur 2020.
+Common baseline: the 2020 values of all the variables (csv and Nutrients.xlsx)
+are those of the BASELINE_SCENARIO scenario (SSP2); only the 2050 values are
+specific to each scenario. A variable missing from SSP2 keeps its 2020 value.
 
-Les régions IMAGE sont agrégées selon la colonne "Code agrégé" de la feuille
-"Régions" (somme des valeurs 2020 et 2050 avant calcul des ratios). Les valeurs World
-absentes ou nulles sont remplacées par la somme des régions.
+The IMAGE regions are aggregated according to the "Code aggregated" column of
+the "Regions" sheet (sum of the 2020 and 2050 values before computing the
+ratios). Missing or zero World values are replaced by the sum of the regions.
 
-La S Monde de chaque scénario est aussi écrite dans la feuille Matching, colonne
-"Facteur S 2050/2020 (Monde <scénario>)" (régénérée à chaque exécution), ainsi que
-F et x Monde du scénario de référence, colonnes "F 2050/2020 (Monde SSP2)" et
-"x 2050/2020 (Monde SSP2)".
+The World S of each scenario is also written into the Matching sheet, column
+"S 2050/2020 (World <scenario>)" (regenerated at each run), as well as the World
+F and x of the reference scenario, columns "F 2050/2020 (World SSP2)" and
+"x 2050/2020 (World SSP2)".
 """
 
 import re
@@ -63,41 +63,51 @@ NUTRIENTS_FILE = SSP_DIR / "Nutrients.xlsx"
 MATCHING_FILE = SSP_DIR / "Matching_extensions_EXIOBASE_IMAGE.xlsx"
 
 MATCHING_SHEET = "Matching"
-REGIONS_SHEET = "Régions"
-NUTRIENTS_DOMAIN = "Nutrients"
-YIELD_FALLBACK_EXTENSION = "Cropland"
+REGIONS_SHEET = "Regions"
+REGIONS_AGGREGATED_COLUMN = "Code aggregated"
+NUTRIENTS_GROUP = "Nutrients"
+YIELD_FALLBACK_STRESSOR = "Cropland"
 
-LABEL_COLUMNS = ["Domaine", "Extension EXIOBASE", "Secteurs EXIOBASE"]
+# Columns of the Matching sheet (renamed by position in load_matching, so that a
+# change of spelling/spacing in the file headers does not break the script).
+GROUP_COLUMN = "EXIOBASE groups"
+STRESSOR_COLUMN = "EXIOBASE stressors"
+PRODUCTS_COLUMN = "EXIOBASE products"
+F_FORMULA_COLUMN = "F (IMAGE)"
+X_FORMULA_COLUMN = "x (IMAGE)"
+# Label columns copied at the start of each scenario sheet
+LABEL_COLUMNS = [GROUP_COLUMN, STRESSOR_COLUMN, PRODUCTS_COLUMN]
 
 YEAR_BASE, YEAR_TARGET = 2020, 2050
-BASELINE_SCENARIO = "SSP2"  # fournit les valeurs 2020 (F et x) de tous les scénarios
+BASELINE_SCENARIO = "SSP2"  # provides the 2020 values (F and x) of all the scenarios
 VALUE_COLUMNS = ["F 2050/2020", "x 2050/2020", "S 2050/2020"]
-# Intensité 2020 (F/x) de la région, rapportée à celle du Monde, en dessous de laquelle S vaut 1
+# 2020 intensity (F/x) of the region, relative to that of the World, below which S is 1
 MIN_RELATIVE_INTENSITY = 1e-2
 
-# Colonnes "Facteur S 2050/2020 (Monde <scénario>)" de la feuille Matching
-WORLD_REGION, WORLD_LABEL = "World", "Monde"
-WORLD_S_HEADER = "Facteur S 2050/2020"
-# Colonnes F et x Monde du scénario de référence de la feuille Matching (indice dans les résultats)
+# "S 2050/2020 (World <scenario>)" columns of the Matching sheet
+WORLD_REGION, WORLD_LABEL = "World", "World"
+WORLD_S_HEADER = "S 2050/2020"
+# World F and x columns of the reference scenario in the Matching sheet (index in the results)
 WORLD_BASELINE_COLUMNS = {f"F 2050/2020 ({WORLD_LABEL} {BASELINE_SCENARIO})": 0,
                           f"x 2050/2020 ({WORLD_LABEL} {BASELINE_SCENARIO})": 1}
 
-# Opérateurs des formules (entourés d'espaces dans les cellules), par priorité croissante.
-OPERATOR_SYMBOLS = {"OU": "OU", "+": "+", "-": "-", "−": "-", "x": "*", "×": "*", "*": "*", "/": "/"}
+# Formula operators (surrounded by spaces in the cells), by increasing precedence.
+# "OU" (French "or", still used in the Matching file) and "OR" are equivalent.
+OPERATOR_SYMBOLS = {"OU": "OR", "OR": "OR", "+": "+", "-": "-", "−": "-", "x": "*", "×": "*", "*": "*", "/": "/"}
 OPERATOR_PATTERN = "|".join(re.escape(op) for op in OPERATOR_SYMBOLS)
-PRECEDENCE = [("OU",), ("+", "-"), ("*", "/")]
+PRECEDENCE = [("OR",), ("+", "-"), ("*", "/")]
 ARITHMETIC = {"+": np.add, "-": np.subtract, "*": np.multiply, "/": np.divide}
-# Fonctions à deux arguments séparés par une virgule (avec ou sans espace ; une virgule entre
-# deux chiffres est une virgule décimale), appliquées année par année, ex. "max (A, 0)".
+# Two-argument functions separated by a comma (with or without space; a comma
+# between two digits is a decimal comma), applied year by year, e.g. "max (A, 0)".
 FUNCTIONS = {"max": np.maximum, "min": np.minimum}
 EMPTY_CELLS = ("", "–", "-")
 
 
 def strip_units(text):
-    """Retire les parenthèses d'unité placées après une variable, ex. "A (kgN/an) x (1 − B)" -> "A x (1 − B)".
+    """Remove the unit parentheses placed after a variable, e.g. "A (kgN/an) x (1 − B)" -> "A x (1 − B)".
 
-    Une parenthèse est un regroupement si elle contient un opérateur ou suit un opérateur,
-    une autre parenthèse ouvrante, un nom de fonction ou le début de la cellule.
+    A parenthesis is a grouping if it contains an operator or follows an
+    operator, another opening parenthesis, a function name or the start of the cell.
     """
     def replace(match):
         prefix = text[:match.start()].rstrip()
@@ -110,7 +120,7 @@ def strip_units(text):
 
 
 def tokenize(text):
-    """Jetons ("name", texte), ("op", symbole) ou ("paren", "(" / ")" / ",")."""
+    """Tokens ("name", text), ("op", symbol) or ("paren", "(" / ")" / ",")."""
     tokens = []
     for i, part in enumerate(re.split(rf"\s+({OPERATOR_PATTERN})\s+|([()]|,(?!\d)|(?<!\d),)", text)):
         if part is None or not part.strip():
@@ -121,9 +131,9 @@ def tokenize(text):
 
 
 def parse_expression(tokens, pos=0, level=0):
-    """Analyse descendante : renvoie (arbre, position suivante).
+    """Recursive descent parsing: returns (tree, next position).
 
-    Arbre : ("var", nom), ("num", valeur) ou (opérateur ou fonction, gauche, droite).
+    Tree: ("var", name), ("num", value) or (operator or function, left, right).
     """
     if level == len(PRECEDENCE):
         return parse_atom(tokens, pos)
@@ -136,34 +146,34 @@ def parse_expression(tokens, pos=0, level=0):
 
 def parse_atom(tokens, pos):
     if pos >= len(tokens):
-        raise ValueError("formule incomplète")
+        raise ValueError("incomplete formula")
     kind, value = tokens[pos]
     if (kind, value) == ("paren", "("):
         node, pos = parse_expression(tokens, pos + 1)
         if pos >= len(tokens) or tokens[pos] != ("paren", ")"):
-            raise ValueError("parenthèse non fermée")
+            raise ValueError("unclosed parenthesis")
         return node, pos + 1
     if kind == "name" and value in FUNCTIONS and tokens[pos + 1:pos + 2] == [("paren", "(")]:
         first, pos = parse_expression(tokens, pos + 2)
         if tokens[pos:pos + 1] != [("paren", ",")]:
-            raise ValueError(f"{value} attend deux arguments")
+            raise ValueError(f"{value} expects two arguments")
         second, pos = parse_expression(tokens, pos + 1)
         if tokens[pos:pos + 1] != [("paren", ")")]:
-            raise ValueError("parenthèse non fermée")
+            raise ValueError("unclosed parenthesis")
         return (value, first, second), pos + 1
     if kind == "name":
         try:
-            return ("num", float(value.replace(",", "."))), pos + 1  # décimale française "0,1"
+            return ("num", float(value.replace(",", "."))), pos + 1  # decimal comma "0,1"
         except ValueError:
             return ("var", value), pos + 1
-    raise ValueError(f"jeton inattendu '{value}'")
+    raise ValueError(f"unexpected token '{value}'")
 
 
 def parse_formula(cell):
-    """Analyse une cellule "Numérateur F" / "Dénominateur x".
+    """Parse an "F (IMAGE)" / "x (IMAGE)" cell.
 
-    Renvoie (arbre, inverse) ; arbre None si pas de variable.
-    Ex. "A + B (Mt MS/an)" -> (("+", A, B), False) ; "1 / Yield|Cereal (t/ha)" -> (("var", "Yield|Cereal"), True).
+    Returns (tree, inverse); tree None if there is no variable.
+    E.g. "A + B (Mt MS/an)" -> (("+", A, B), False); "1 / Yield|Cereal (t/ha)" -> (("var", "Yield|Cereal"), True).
     """
     if pd.isna(cell):
         return None, False
@@ -174,16 +184,16 @@ def parse_formula(cell):
     try:
         tree, pos = parse_expression(tokens)
         if pos != len(tokens):
-            raise ValueError(f"jeton inattendu '{tokens[pos][1]}'")
+            raise ValueError(f"unexpected token '{tokens[pos][1]}'")
     except ValueError as error:
-        raise ValueError(f"Formule invalide ({error}) : {cell!r}") from None
+        raise ValueError(f"Invalid formula ({error}): {cell!r}") from None
     if tree[0] == "/" and tree[1] == ("num", 1.0):
         return tree[2], True
     return tree, False
 
 
 def formula_variables(tree):
-    """Variables IMAGE de la formule, dans l'ordre d'apparition."""
+    """IMAGE variables of the formula, in order of appearance."""
     if tree is None or tree[0] == "num":
         return []
     if tree[0] == "var":
@@ -194,18 +204,18 @@ def formula_variables(tree):
 def load_matching():
     df = pd.read_excel(MATCHING_FILE, sheet_name=MATCHING_SHEET)
     return df.rename(columns={
-        df.columns[0]: "Domaine",
-        df.columns[1]: "Extension EXIOBASE",
-        df.columns[2]: "Secteurs EXIOBASE",
-        df.columns[3]: "Numérateur F",
-        df.columns[4]: "Dénominateur x",
+        df.columns[0]: GROUP_COLUMN,
+        df.columns[1]: STRESSOR_COLUMN,
+        df.columns[2]: PRODUCTS_COLUMN,
+        df.columns[3]: F_FORMULA_COLUMN,
+        df.columns[4]: X_FORMULA_COLUMN,
     })
 
 
 def load_region_maps():
-    """Dictionnaires code IMAGE (csv) -> code agrégé et code IMAGE-GNM -> code agrégé."""
-    df = pd.read_excel(MATCHING_FILE, sheet_name=REGIONS_SHEET).dropna(subset=["Code agrégé"])
-    gnm_col, image_col, agg_col = df.columns[0], df.columns[1], "Code agrégé"
+    """Dictionaries IMAGE code (csv) -> aggregated code and IMAGE-GNM code -> aggregated code."""
+    df = pd.read_excel(MATCHING_FILE, sheet_name=REGIONS_SHEET).dropna(subset=[REGIONS_AGGREGATED_COLUMN])
+    gnm_col, image_col, agg_col = df.columns[0], df.columns[1], REGIONS_AGGREGATED_COLUMN
     image_map = dict(zip(df[image_col], df[agg_col]))
     gnm_map = dict(zip(df[gnm_col], df[agg_col]))
     region_order = list(dict.fromkeys(df[agg_col]))
@@ -213,16 +223,16 @@ def load_region_maps():
 
 
 def aggregate(df, region_map):
-    """Tableau (variable x région agrégée) des valeurs 2020 et 2050, sommées par région agrégée."""
+    """Table (variable x aggregated region) of the 2020 and 2050 values, summed by aggregated region."""
     df = df.assign(Region=df["Region"].map(region_map)).dropna(subset=["Region"])
     return with_world_fallback(df.groupby(["Variable", "Region"])[[YEAR_BASE, YEAR_TARGET]].sum(min_count=1))
 
 
 def with_world_fallback(data):
-    """Valeurs World absentes ou nulles remplacées par la somme des autres régions.
+    """Missing or zero World values replaced by the sum of the other regions.
 
-    Le csv ne renseigne pas toujours World (ex. Production|Pulp and Paper|Volume = 0,
-    Secondary Energy|Heat absent) alors que les régions le sont.
+    The csv does not always fill in World (e.g. Production|Pulp and Paper|Volume = 0,
+    Secondary Energy|Heat missing) whereas the regions are filled in.
     """
     is_world = data.index.get_level_values("Region") == WORLD_REGION
     world = data[is_world].droplevel("Region")
@@ -243,12 +253,12 @@ def load_nutrients(scenario_name, gnm_map):
     df = pd.read_excel(NUTRIENTS_FILE, header=1)
     df = df[df["Scenario"] == f"PB_{scenario_name}"]
     if df.empty:
-        print(f"[info] Scénario PB_{scenario_name} absent de Nutrients.xlsx.")
+        print(f"[info] Scenario PB_{scenario_name} missing from Nutrients.xlsx.")
     return aggregate(df, gnm_map)
 
 
 def with_common_baseline(data, baseline):
-    """Copie de data dont les valeurs 2020 sont celles du scénario de référence (si disponibles)."""
+    """Copy of data whose 2020 values are those of the reference scenario (if available)."""
     data = data.copy()
     data[YEAR_BASE] = baseline[YEAR_BASE].reindex(data.index).combine_first(data[YEAR_BASE])
     return data
@@ -260,14 +270,14 @@ def has_variables(data, variables):
 
 
 def f_sources(row, scenario_data, nutrients_data):
-    """Sources des variables de F, par ordre de préférence : Nutrients.xlsx d'abord pour le domaine Nutrients."""
-    if row["Domaine"] == NUTRIENTS_DOMAIN:
+    """Sources of the F variables, by order of preference: Nutrients.xlsx first for the Nutrients group."""
+    if row[GROUP_COLUMN] == NUTRIENTS_GROUP:
         return [nutrients_data, scenario_data]
     return [scenario_data, nutrients_data]
 
 
 def lookup_values(sources, variable, region):
-    """Valeurs [2020, 2050] de la variable dans la première source qui la contient (NaN sinon)."""
+    """[2020, 2050] values of the variable in the first source containing it (NaN otherwise)."""
     for data in sources:
         try:
             return data.loc[(variable, region), [YEAR_BASE, YEAR_TARGET]].to_numpy(dtype=float)
@@ -277,15 +287,15 @@ def lookup_values(sources, variable, region):
 
 
 def evaluate(tree, sources, region):
-    """Valeurs [2020, 2050] de la formule pour une région (NaN si non calculable)."""
+    """[2020, 2050] values of the formula for a region (NaN if it cannot be computed)."""
     kind = tree[0]
     if kind == "num":
         return np.full(2, tree[1])
     if kind == "var":
         return lookup_values(sources, tree[1], region)
     left = evaluate(tree[1], sources, region)
-    if kind == "OU":
-        # A négatif (2020 ou 2050) : indicateur de repli B
+    if kind == "OR":
+        # A negative (2020 or 2050): fallback indicator B
         return evaluate(tree[2], sources, region) if (left < 0).any() else left
     with np.errstate(divide="ignore", invalid="ignore"):
         result = {**ARITHMETIC, **FUNCTIONS}[kind](left, evaluate(tree[2], sources, region))
@@ -293,7 +303,7 @@ def evaluate(tree, sources, region):
 
 
 def ratio(tree, sources, region):
-    """Ratio 2050/2020 de la formule pour une région (NaN si non calculable)."""
+    """2050/2020 ratio of the formula for a region (NaN if it cannot be computed)."""
     if tree is None:
         return np.nan
     base, target = evaluate(tree, sources, region)
@@ -303,7 +313,7 @@ def ratio(tree, sources, region):
 
 
 def relative_intensity(f_tree, f_src, x_tree, x_src, region):
-    """Intensité 2020 F/x de la région rapportée à celle du Monde (NaN si non calculable)."""
+    """2020 intensity F/x of the region relative to that of the World (NaN if it cannot be computed)."""
     if f_tree is None or x_tree is None or region == WORLD_REGION:
         return np.nan
     f_region, f_world = evaluate(f_tree, f_src, region)[0], evaluate(f_tree, f_src, WORLD_REGION)[0]
@@ -314,15 +324,15 @@ def relative_intensity(f_tree, f_src, x_tree, x_src, region):
 
 
 def compute_row(row, scenario_data, nutrients_data, region):
-    """(F, x, S, négligeable) ; négligeable = S forcé à 1 car l'intensité 2020 de la région est
-    négligeable (voir MIN_RELATIVE_INTENSITY)."""
-    f_tree, inverse = parse_formula(row["Numérateur F"])
-    x_tree, _ = parse_formula(row["Dénominateur x"])
+    """(F, x, S, negligible); negligible = S forced to 1 because the 2020 intensity
+    of the region is negligible (see MIN_RELATIVE_INTENSITY)."""
+    f_tree, inverse = parse_formula(row[F_FORMULA_COLUMN])
+    x_tree, _ = parse_formula(row[X_FORMULA_COLUMN])
     f_src = f_sources(row, scenario_data, nutrients_data)
     f = ratio(f_tree, f_src, region)
     x = ratio(x_tree, [scenario_data], region)
     if inverse:
-        # F = ratio de "1 / <formule>" (= S), cohérent avec le numérateur affiché
+        # F = ratio of "1 / <formula>" (= S), consistent with the displayed numerator
         s = 1 / f if pd.notna(f) and f != 0 else 1.0
         return (s if pd.notna(f) and f != 0 else f), x, s, False
     if pd.isna(f) or pd.isna(x) or x == 0:
@@ -333,32 +343,32 @@ def compute_row(row, scenario_data, nutrients_data, region):
 
 
 def apply_yield_fallback(matching, scenario_data, scenario_name):
-    """Lignes "1 / Yield|..." dont le rendement manque : reprend F et x de la ligne Cropland."""
-    cropland = matching.loc[matching["Extension EXIOBASE"] == YIELD_FALLBACK_EXTENSION].iloc[0]
+    """"1 / Yield|..." rows whose yield is missing: take F and x of the Cropland row."""
+    cropland = matching.loc[matching[STRESSOR_COLUMN] == YIELD_FALLBACK_STRESSOR].iloc[0]
     matching = matching.copy()
     for i, row in matching.iterrows():
-        f_tree, inverse = parse_formula(row["Numérateur F"])
+        f_tree, inverse = parse_formula(row[F_FORMULA_COLUMN])
         f_vars = formula_variables(f_tree)
         if inverse and not has_variables(scenario_data, f_vars):
-            matching.loc[i, ["Numérateur F", "Dénominateur x"]] = cropland[["Numérateur F", "Dénominateur x"]].values
-            print(f"[info] {scenario_name} : {', '.join(f_vars)} absent, "
-                  f"'{row['Extension EXIOBASE']}' reprend la ligne '{YIELD_FALLBACK_EXTENSION}'.")
+            matching.loc[i, [F_FORMULA_COLUMN, X_FORMULA_COLUMN]] = cropland[[F_FORMULA_COLUMN, X_FORMULA_COLUMN]].values
+            print(f"[info] {scenario_name}: {', '.join(f_vars)} missing, "
+                  f"'{row[STRESSOR_COLUMN]}' takes the '{YIELD_FALLBACK_STRESSOR}' row.")
     return matching
 
 
 def check_variables(matching, scenario_data, nutrients_data, scenario_name):
-    """Signale les variables de la feuille Matching introuvables dans les données."""
+    """Report the variables of the Matching sheet not found in the data."""
     for _, row in matching.iterrows():
-        f_tree, _ = parse_formula(row["Numérateur F"])
-        x_tree, _ = parse_formula(row["Dénominateur x"])
+        f_tree, _ = parse_formula(row[F_FORMULA_COLUMN])
+        x_tree, _ = parse_formula(row[X_FORMULA_COLUMN])
         for tree, sources in [(f_tree, f_sources(row, scenario_data, nutrients_data)), (x_tree, [scenario_data])]:
             for v in formula_variables(tree):
                 if not any(has_variables(source, [v]) for source in sources):
-                    print(f"[info] {scenario_name} : variable '{v}' introuvable ({row['Extension EXIOBASE']}).")
+                    print(f"[info] {scenario_name}: variable '{v}' not found ({row[STRESSOR_COLUMN]}).")
 
 
 def write_sheet(wb, sheet_name, matching, results, region_order):
-    """(Re)crée la feuille : 2 lignes d'en-tête (code région / F, x, S), puis une ligne par extension."""
+    """(Re)create the sheet: 2 header rows (region code / F, x, S), then one row per stressor."""
     if sheet_name in wb.sheetnames:
         index = wb.sheetnames.index(sheet_name)
         wb.remove(wb[sheet_name])
@@ -396,8 +406,8 @@ def write_sheet(wb, sheet_name, matching, results, region_order):
 
 
 def shift_columns(ws, col, delta):
-    """Insère (delta = 1) ou supprime (delta = -1) la colonne col, en décalant aussi les largeurs de colonnes
-    (non gérées par openpyxl)."""
+    """Insert (delta = 1) or delete (delta = -1) column col, also shifting the
+    column widths (not handled by openpyxl)."""
     widths = {column_index_from_string(letter): dim.width for letter, dim in ws.column_dimensions.items()}
     ws.insert_cols(col) if delta > 0 else ws.delete_cols(col)
     for index in sorted(widths, reverse=delta > 0):
@@ -406,16 +416,17 @@ def shift_columns(ws, col, delta):
 
 
 def add_world_columns(wb, excel_rows, world_s):
-    """Écrit dans la feuille Matching une colonne "Facteur S 2050/2020 (Monde <scénario>)" par scénario,
-    valeurs arrondies à 2 décimales. La colonne du scénario de référence est écrasée sur place (formules
-    comprises) ; les autres sont supprimées puis réinsérées, dans l'ordre, juste après elle.
+    """Write into the Matching sheet one "S 2050/2020 (World <scenario>)" column
+    per scenario, values rounded to 2 decimals. The column of the reference
+    scenario is overwritten in place (formulas included); the others are deleted
+    then reinserted, in order, right after it.
 
-    excel_rows : ligne Excel de chaque extension ; world_s : {scénario: [S Monde par extension]}.
+    excel_rows: Excel row of each stressor; world_s: {scenario: [World S per stressor]}.
     """
     ws = wb[MATCHING_SHEET]
     is_world_s = lambda h: str(h).startswith(WORLD_S_HEADER)
     header_of = lambda name: f"{WORLD_S_HEADER} ({WORLD_LABEL} {name})"
-    # Mise en forme reprise de la première colonne "Facteur S" existante
+    # Formatting taken from the first existing World S column
     template = next((cell for cell in ws[1] if is_world_s(cell.value)), None)
     template_format = None if template is None else (
         copy(template.font), copy(template.fill), copy(template.border), copy(template.alignment),
@@ -430,7 +441,7 @@ def add_world_columns(wb, excel_rows, world_s):
         headers = [cell.value for cell in ws[1]]
         header = header_of(name)
         if header in headers:
-            col, action = headers.index(header) + 1, "régénérée"
+            col, action = headers.index(header) + 1, "regenerated"
         else:
             col = max((i for i, h in enumerate(headers, start=1) if is_world_s(h)), default=ws.max_column) + 1
             shift_columns(ws, col, 1)
@@ -438,33 +449,33 @@ def add_world_columns(wb, excel_rows, world_s):
             if template_format is not None:
                 cell.font, cell.fill, cell.border, cell.alignment, width = template_format
                 ws.column_dimensions[cell.column_letter].width = width
-            action = "ajoutée"
+            action = "added"
         for r, value in zip(excel_rows, values):
             ws.cell(row=r, column=col, value=None if pd.isna(value) else round(float(value), 2))
-        print(f"Colonne '{header}' {action} dans la feuille '{MATCHING_SHEET}'.")
+        print(f"Column '{header}' {action} in sheet '{MATCHING_SHEET}'.")
 
 
 def write_world_baseline_columns(wb, excel_rows, world_results):
-    """Écrit F et x Monde du scénario de référence dans les colonnes existantes de la feuille Matching,
-    valeurs arrondies à 2 décimales.
+    """Write the World F and x of the reference scenario into the existing
+    columns of the Matching sheet, values rounded to 2 decimals.
 
-    world_results : [(F, x, S) Monde par extension] du scénario de référence.
+    world_results: [(F, x, S) World per stressor] of the reference scenario.
     """
     ws = wb[MATCHING_SHEET]
     headers = [cell.value for cell in ws[1]]
     for header, k in WORLD_BASELINE_COLUMNS.items():
         if header not in headers:
-            print(f"[info] Colonne '{header}' absente de la feuille '{MATCHING_SHEET}', non écrite.")
+            print(f"[info] Column '{header}' missing from sheet '{MATCHING_SHEET}', not written.")
             continue
         col = headers.index(header) + 1
         for r, values in zip(excel_rows, world_results):
             ws.cell(row=r, column=col, value=None if pd.isna(values[k]) else round(float(values[k]), 2))
-        print(f"Colonne '{header}' régénérée dans la feuille '{MATCHING_SHEET}'.")
+        print(f"Column '{header}' regenerated in sheet '{MATCHING_SHEET}'.")
 
 
 def main():
-    matching = load_matching().dropna(subset=["Extension EXIOBASE"])
-    excel_rows = list(matching.index + 2)  # en-tête en ligne 1
+    matching = load_matching().dropna(subset=[STRESSOR_COLUMN])
+    excel_rows = list(matching.index + 2)  # header on row 1
     matching = matching.reset_index(drop=True)
     image_map, gnm_map, region_order = load_region_maps()
     wb = openpyxl.load_workbook(MATCHING_FILE)
@@ -486,12 +497,12 @@ def main():
         }
         neglected = [(excel_rows[i], region) for (i, region), values in results.items() if values[3]]
         if neglected:
-            print(f"[info] {scenario_name} : S forcé à 1 pour {len(neglected)} cellule(s) (intensité 2020 "
-                  f"< {MIN_RELATIVE_INTENSITY:g} x Monde) : "
-                  + ", ".join(f"ligne {r} {region}" for r, region in neglected))
+            print(f"[info] {scenario_name}: S forced to 1 for {len(neglected)} cell(s) (2020 intensity "
+                  f"< {MIN_RELATIVE_INTENSITY:g} x World): "
+                  + ", ".join(f"row {r} {region}" for r, region in neglected))
         results = {key: values[:3] for key, values in results.items()}
         write_sheet(wb, scenario_name[:31], matching, results, region_order)
-        print(f"Feuille '{scenario_name}' écrite.")
+        print(f"Sheet '{scenario_name}' written.")
         world_s[scenario_name] = [results[(i, WORLD_REGION)][2] for i in range(len(matching))]
         if scenario_name == BASELINE_SCENARIO:
             write_world_baseline_columns(wb, excel_rows, [results[(i, WORLD_REGION)] for i in range(len(matching))])
@@ -501,8 +512,8 @@ def main():
     try:
         wb.save(MATCHING_FILE)
     except PermissionError:
-        sys.exit(f"Impossible d'écrire {MATCHING_FILE} : fermer le fichier dans Excel puis relancer.")
-    print(f"Classeur écrit : {MATCHING_FILE}")
+        sys.exit(f"Cannot write {MATCHING_FILE}: close the file in Excel then run again.")
+    print(f"Workbook written: {MATCHING_FILE}")
 
 
 if __name__ == "__main__":

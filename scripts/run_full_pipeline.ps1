@@ -1,5 +1,5 @@
 <#
-Enchaine l'ensemble du pipeline PlaneFR :
+Chains the whole PlaneFR pipeline:
     0. exiobase3_eeio_batch (matmat-ademe)
     1. gmrio_to_snac_s   (matmat-ademe)
     2. update_calib_fr   (datapack)
@@ -7,28 +7,43 @@ Enchaine l'ensemble du pipeline PlaneFR :
     4. extract_f_y_tot    (matmat-ademe)
     5. reformat_d_cba_monde_europe (matmat-ademe)
     6. reformat_d_cba_k   (matmat-ademe)
+    7. export_dS
+    8. compute_ds_x_dom
+    9. second pass (run_pipeline_from_engine.ps1)
 
-Chaque etape est deleguee au script dedie (run_gmrio_to_snac_s_batch.ps1,
-run_update_calib_fr_batch.ps1, run_engine_batch.ps1) ou lancee directement
-pour les scripts Python (etapes 4 a 6). update_calib_fr est la seule etape
-qui doit tourner depuis l'environnement du projet datapack (frere de
-matmat-ademe) ; toutes les autres tournent depuis matmat-ademe. Les chemins
-sont calcules relativement a l'emplacement de ce script, pour fonctionner
-quel que soit le repertoire courant depuis lequel il est invoque.
+Each step is delegated to the dedicated script (run_gmrio_to_snac_s_batch.ps1,
+run_update_calib_fr_batch.ps1, run_engine_batch.ps1) or launched directly
+for the Python scripts (steps 4 to 8). update_calib_fr is the only step
+that must run from the environment of the datapack project (sibling of
+matmat-ademe); all the others run from matmat-ademe. The paths
+are computed relative to the location of this script, so that it works
+whatever the current directory it is invoked from.
 
-S'arrete au premier echec (code de sortie non nul) pour eviter d'enchainer
-des etapes sur des donnees incompletes.
+Second pass (steps 3 to 8, via run_pipeline_from_engine.ps1): step 8
+computes the dS_x_dom of the manual shocks from the 2050 production output
+by step 3, which the engine must then apply. The first pass applies the
+dS_x_dom of the previous run (kept by rebuild_shock_extensions.py), exact if
+neither my_manual_param.xlsx nor the accounts or system shocks have changed;
+the second pass guarantees exactness in all cases (production does not depend
+on the dS_x_dom, a single iteration is enough). -SinglePass skips it (faster,
+to be reserved for the case above).
 
-La version Exiobase est passee en parametre (-Version, 3.11.2 par defaut) :
-elle est transmise aux scripts .ps1 de chaque etape (qui la reportent dans
-les fichiers de settings) et aux scripts Python via la variable
-d'environnement PLANEFR_EXIOBASE_VERSION.
-    Exemple : .\run_full_pipeline.ps1 -Version 3.11.2
+Stops at the first failure (non-zero exit code) to avoid chaining steps on
+incomplete data.
+
+The Exiobase version is passed as a parameter (-Version, 3.11.2 by default):
+it is forwarded to the .ps1 scripts of each step (which write it into the
+settings files) and to the Python scripts through the environment variable
+PLANEFR_EXIOBASE_VERSION.
+    Example: .\run_full_pipeline.ps1 -Version 3.11.2
+             .\run_full_pipeline.ps1 -Version 3.11.2 -SinglePass
 #>
 
 param(
-    # Version Exiobase a utiliser (ex. "3.11.2")
-    [string]$Version = "3.11.2"
+    # Exiobase version to use (e.g. "3.11.2")
+    [string]$Version = "3.11.2",
+    # Does not run the second pass (engine + post-processing)
+    [switch]$SinglePass
 )
 
 $env:PLANEFR_EXIOBASE_VERSION = $Version
@@ -47,7 +62,7 @@ function Invoke-Stage {
     & $Action
 
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "Pipeline interrompu : echec de l'etape '$Name' (code $LASTEXITCODE)" -ForegroundColor Red
+        Write-Host "Pipeline interrupted: step '$Name' failed (code $LASTEXITCODE)" -ForegroundColor Red
         exit $LASTEXITCODE
     }
 }
@@ -93,4 +108,10 @@ Invoke-Stage "8. compute_ds_x_dom" {
     uv run python (Join-Path $scriptsDir "compute_ds_x_dom.py")
 }
 
-Write-Host "`nPipeline complet termine avec succes (version $Version)." -ForegroundColor Green
+if (-not $SinglePass) {
+    Invoke-Stage "9. second pass (engine with up-to-date dS_x_dom)" {
+        & (Join-Path $scriptsDir "run_pipeline_from_engine.ps1") -Version $Version
+    }
+}
+
+Write-Host "`nFull pipeline completed successfully (version $Version)." -ForegroundColor Green

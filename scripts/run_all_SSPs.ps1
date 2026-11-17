@@ -1,42 +1,41 @@
 <#
-Enchaine les etapes SSPs dans l'ordre :
-1. extract_S_SSPs              (extract_S_SSPs.py : ratios F, x, S 2050/2020
-                                des scenarios IMAGE -> feuilles de
+Chains the SSP steps in order:
+1. extract_S_SSPs              (extract_S_SSPs.py: 2050/2020 ratios of F, x, S
+                                of the IMAGE scenarios -> sheets of
                                 Matching_extensions_EXIOBASE_IMAGE.xlsx)
-2. generate_shock_dS           (generate_shock_dS.py : dS_x_dom et dA dans
+2. generate_shock_dS           (generate_shock_dS.py: dS_x_dom and dA in
                                 2-shocks\3-SSPs_2050\<SSP>_2050)
 3. engine                      (run_engine_batch_SSPs.ps1)
 4. gmrio_to_snac_s             (run_gmrio_to_snac_s_batch_SSPs.ps1)
 5. update_calib_fr             (run_update_calib_fr_batch_SSPs.ps1)
-6. engine France               (run_engine_batch.ps1 : baselines + chocs de
-                                1-transitions_2050 sur chaque jeu d'accounts
-                                de Outputs\France, sorties dans
+6. engine France               (run_engine_batch.ps1: baselines + shocks of
+                                1-transitions_2050 on each set of accounts
+                                of Outputs\France, outputs in
                                 Module_PlaneFR/data/<version>/<SSP|no_SSP>/)
 7. reformat_d_cba_monde_europe (reformat_d_cba_monde_europe.py)
 8. reformat_d_cba_k            (reformat_d_cba_k.py)
-9. export_dS                   (export_dS.py : S_extraction.xlsx)
-10. compute_ds_x_dom           (compute_ds_x_dom.py : dS_x_dom des chocs
-                                manuels + application des chocs F_Y_tot)
+9. export_dS                   (export_dS.py: S_extraction.xlsx)
+10. compute_ds_x_dom           (compute_ds_x_dom.py: dS_x_dom of the manual
+                                shocks + application of the F_Y_tot shocks)
 
-Pas d'etape extract_f_y_tot : elle ne depend que d'Exiobase brut (F_Y_tot
-World de Base_year_2015/2019), pas des scenarios ; elle doit avoir ete
-lancee au moins une fois (run_pipeline_from_engine.ps1 ou a la main) pour
-que reformat_d_cba_monde_europe trouve Outputs\World\Base_year_*\...\F_Y_tot.pkl.
+No extract_f_y_tot step: it only depends on raw Exiobase (World F_Y_tot of
+Base_year_2015/2019), not on the scenarios; it must have been run at least
+once (run_pipeline_from_engine.ps1 or by hand) so that
+reformat_d_cba_monde_europe finds Outputs\World\Base_year_*\...\F_Y_tot.pkl.
 
-Les etapes 7 et 8 (comme dans run_pipeline_from_engine.ps1) traitent tous les
-scenarios de Module_PlaneFR/data/<version>, y compris ceux imbriques par SSP
-(data/<version>/<SSP>/<scenario>). La version est transmise aux scripts
-Python via la variable d'environnement PLANEFR_EXIOBASE_VERSION.
+Steps 7 and 8 (as in run_pipeline_from_engine.ps1) process all the scenarios
+of Module_PlaneFR/data/<version>, including those nested by SSP
+(data/<version>/<SSP>/<scenario>). The version is passed to the Python
+scripts through the environment variable PLANEFR_EXIOBASE_VERSION.
 
-S'arrete si une etape se termine avec un code d'erreur (seul
-run_gmrio_to_snac_s_batch_SSPs.ps1 renvoie exit 1 en cas d'echec parmi les
-scripts .ps1 ; les autres signalent leurs echecs par scenario sans
-interrompre la boucle).
+Stops if a step ends with an error code (among the .ps1 scripts, only
+run_gmrio_to_snac_s_batch_SSPs.ps1 returns exit 1 on failure; the others
+report their failures by scenario without interrupting the loop).
 #>
 
 param(
-    # Version Exiobase a utiliser par update_calib_fr et les scripts de
-    # reformatage (ex. "3.11.2")
+    # Exiobase version to use for update_calib_fr and the reformatting
+    # scripts (e.g. "3.11.2")
     [string]$Version = "3.11.2"
 )
 
@@ -58,7 +57,7 @@ $steps = @(
 )
 
 foreach ($step in $steps) {
-    Write-Host "########## Etape $($step.Name) ##########" -ForegroundColor Magenta
+    Write-Host "########## Step $($step.Name) ##########" -ForegroundColor Magenta
 
     $scriptPath = Join-Path $PSScriptRoot $step.Script
     $global:LASTEXITCODE = 0
@@ -72,9 +71,9 @@ foreach ($step in $steps) {
     }
 
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "Arret : echec de l'etape $($step.Name) (code $LASTEXITCODE)" -ForegroundColor Red
+        Write-Host "Stopped: step $($step.Name) failed (code $LASTEXITCODE)" -ForegroundColor Red
         exit $LASTEXITCODE
     }
 }
 
-Write-Host "########## Toutes les etapes SSPs sont terminees ##########" -ForegroundColor Green
+Write-Host "########## All the SSP steps are done ##########" -ForegroundColor Green
