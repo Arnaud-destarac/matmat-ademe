@@ -1,0 +1,24 @@
+{
+    "path_in": {
+        "accounts": ".\\4-PlaneFR\\Outputs\\World\\SSP2_2050",
+        "detail_levels": "{parameters}\\2-gmrio_to_snac_s\\detail_levels.xlsx",
+        "bridges": "{parameters}\\2-gmrio_to_snac_s\\bridge_matrices.xlsx"
+    },
+    "path_out": ".\\4-PlaneFR\\Outputs_inter\\gmrio_to_snac_s\\SSPs\\SSP2_2050",
+    "export_format": [
+        "pickle"
+    ],
+    "extension_names": [
+        "nutrients",
+        "deforestation",
+        "energy",
+        "ghg_emissions",
+        "land",
+        "raw_materials",
+        "water",
+        "air_emissions"
+    ],
+    "m_row_mode": "foreign_global_feedback",
+    "calculate_accounts": false,
+    "clean_path_out": true
+}

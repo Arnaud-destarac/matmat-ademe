@@ -1,0 +1,23 @@
+{
+    "path_in": {
+        "accounts": ".\\4-PlaneFR\\Outputs\\World\\Base_year_2015",
+        "shock": ".\\4-PlaneFR\\2-shocks\\3-SSPs_2050\\SSP2_2050",
+        "bridges": null
+    },
+    "path_out": ".\\4-PlaneFR\\Outputs\\World\\SSP2_2050",
+    "system_calcul_strategy": "standard",
+    "extension_names": [
+        "ghg_emissions",
+        "energy",
+        "land",
+        "nutrients",
+        "raw_materials",
+        "water",
+        "air_emissions",
+        "deforestation"
+    ],
+    "export_format": [
+        "pickle"
+    ],
+    "clean_path_out": true
+}

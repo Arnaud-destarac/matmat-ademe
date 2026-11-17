@@ -1,0 +1,36 @@
+{
+    "path_in": {
+        "older_accounts": ".\\3-workshops\\1-accounts\\MatMat\\3.10.2_France_2015",
+        "newer_accounts": ".\\4-PlaneFR\\Outputs_inter\\gmrio_to_snac_s\\SSPs\\SSP2_2050",
+        "bridges": "{parameters}\\3-update_calib_fr\\bridge_matrices.xlsx"
+    },
+    "path_out": ".\\4-PlaneFR\\Outputs\\France\\SSP2_2050",
+    "export_format": [
+        "pickle"
+    ],
+    "extension_names": {
+        "older_accounts": [
+            "dom_ghg_emissions",
+            "dom_ghg_combustion",
+            "dom_raw_materials"
+        ],
+        "newer_accounts": [
+            "dom_water",
+            "dom_energy",
+            "dom_land",
+            "dom_nutrients",
+            "dom_air_emissions",
+            "dom_deforestation",
+            "imp_water",
+            "imp_energy",
+            "imp_land",
+            "imp_nutrients",
+            "imp_ghg_emissions",
+            "imp_raw_materials",
+            "imp_air_emissions",
+            "imp_deforestation"
+        ]
+    },
+    "calculate_accounts": true,
+    "clean_path_out": true
+}

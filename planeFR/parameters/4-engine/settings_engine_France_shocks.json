@@ -1,0 +1,32 @@
+{
+    "path_in": {
+        "accounts": ".\\4-PlaneFR\\Outputs\\France\\Base_year_2015",
+        "shock": null,
+        "bridges": null
+    },
+    "path_out": "",
+    "system_calcul_strategy": "exo_invest_matrix",
+    "extension_names": [
+        "dom_ghg_emissions",
+        "dom_ghg_combustion",
+        "dom_energy",
+        "dom_land",
+        "dom_nutrients",
+        "dom_raw_materials",
+        "dom_water",
+        "dom_air_emissions",
+        "dom_deforestation",
+        "imp_deforestation",
+        "imp_ghg_emissions",
+        "imp_energy",
+        "imp_land",
+        "imp_nutrients",
+        "imp_raw_materials",
+        "imp_water",
+        "imp_air_emissions"
+    ],
+    "export_format": [
+        "pickle"
+    ],
+    "clean_path_out": true
+}

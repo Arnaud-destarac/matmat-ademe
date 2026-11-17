@@ -1,0 +1,23 @@
+{
+    "path_in": {
+        "accounts": ".\\4-PlaneFR\\1-accounts\\Exiobase\\3.11.2_2019\\3.11.2_pxp_2019",
+        "shock": null,
+        "bridges": null
+    },
+    "path_out": ".\\4-PlaneFR\\Outputs\\World\\Base_year_2019",
+    "system_calcul_strategy": "standard",
+    "extension_names": [
+        "ghg_emissions",
+        "energy",
+        "land",
+        "nutrients",
+        "raw_materials",
+        "water",
+        "air_emissions",
+        "deforestation"
+    ],
+    "export_format": [
+        "pickle"
+    ],
+    "clean_path_out": true
+}

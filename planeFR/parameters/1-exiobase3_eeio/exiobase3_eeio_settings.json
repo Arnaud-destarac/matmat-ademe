@@ -1,0 +1,21 @@
+{
+    "path_in": ".\\01-sources_public\\exiobase",
+    "path_out": ".\\4-PlaneFR\\1-accounts\\Exiobase\\3.11.2_2019",
+    "export_format": [
+        "pickle"
+    ],
+    "version": "3.11.2",
+    "system": "pxp",
+    "base_year": 2019,
+    "extension_names": [
+        "nutrients",
+        "deforestation",
+        "energy",
+        "ghg_emissions",
+        "land",
+        "raw_materials",
+        "water",
+        "air_emissions"
+    ],
+    "clean_path_out": true
+}

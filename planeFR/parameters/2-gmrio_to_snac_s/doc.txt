@@ -1,0 +1,16 @@
+The import-extension multipliers can be computed using three modes:
+
+`foreign_isolated`
+    Use the isolated rest-of-world production system. Domestic-foreign feedback
+    loops are excluded, and only impacts occurring outside the domestic block
+    are accounted for.
+
+`foreign_global_feedback`
+    Use the full global production system while setting domestic direct
+    extensions to zero. Domestic-foreign feedback loops are included, but only
+    impacts occurring outside the domestic block are accounted for.
+
+`world_global_feedback`
+    Use the full global production system and the full set of direct
+    extensions. Domestic-foreign feedback loops are included, and impacts
+    occurring both inside and outside the domestic block are accounted for.
