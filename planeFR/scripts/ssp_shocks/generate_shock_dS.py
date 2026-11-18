@@ -1,7 +1,7 @@
 """
 Generates dS, the relative variation of S (= F_x_dom / x) between 2020 and 2050,
 for each SSP scenario and each stressor filled in in
-Module_PlaneFR/data/SSP/Matching_extensions_EXIOBASE_IMAGE.xlsx.
+Module_PlaneFR/data/Input_Shocks_MatMat/Matching_EXIOBASE_IMAGE.xlsx.
 
 One sheet per scenario (SSP1, SSP2, ...). Each row of the sheet gives:
     - 'EXIOBASE groups'    : the extension (Air_emissions -> air_emissions, ...)
@@ -114,10 +114,10 @@ from scipy.sparse import csr_matrix
 from scipy.sparse.linalg import ArpackNoConvergence, eigs
 
 import extract_S_SSPs as ssp  # same folder; also adds _common to sys.path
-from planefr_paths import MATMAT_DIR, MODULE_PLANEFR_DIR, PARAMETERS_DIR, get_ssp_base_accounts_dir
+from planefr_paths import MATMAT_DIR, PARAMETERS_DIR, get_ssp_base_accounts_dir
 from planefr_utils import make_pickle_portable
 
-MATCHING_FILE = MODULE_PLANEFR_DIR / "data" / "SSP" / "Matching_extensions_EXIOBASE_IMAGE.xlsx"
+MATCHING_FILE = ssp.MATCHING_FILE
 BRIDGE_FILE = PARAMETERS_DIR / "4-engine" / "bridge_SSPs.xlsx"
 # World accounts shocked by the engine (path_in.accounts of settings_engine_SSPs.json):
 # single source of the structure and of the base year of the shocks (see docstring)
@@ -584,6 +584,7 @@ def main():
                 a_base, ctx = a_base_df.to_numpy(), make_a_context(a_base_df, region_bridge)
                 rules = load_a_rules()
                 image_map, _, _ = ssp.load_region_maps()
+                baseline = ssp.load_scenario(ssp.SCENARIOS_DIR / f"{ssp.BASELINE_SCENARIO}.csv", image_map)
             # The scenario sheets are generated from the Matching sheet by
             # extract_S_SSPs.py: a group missing from the Matching sheet means
             # they are out of date (e.g. groups renamed since the last run).
@@ -593,7 +594,6 @@ def main():
                     f"Sheet '{sheet_name}': groups {unknown} not found in sheet '{ssp.MATCHING_SHEET}'. "
                     f"Run extract_S_SSPs.py first to regenerate the scenario sheets."
                 )
-                baseline = ssp.load_scenario(ssp.SCENARIOS_DIR / f"{ssp.BASELINE_SCENARIO}.csv", image_map)
             data = load_image_data(sheet_name, image_map, baseline)
             a_new = compute_shocked_a(a_base, ctx, a_shocks, rules, data)
             if check_shocked_a(a_new, a_base, ctx, sheet_name):

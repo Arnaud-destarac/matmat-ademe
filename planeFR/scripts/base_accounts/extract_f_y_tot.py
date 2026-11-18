@@ -19,8 +19,8 @@ extension's F_Y the same way as its F:
 
 All extensions are computed with a single EXIOBASE version, WORLD_VERSION,
 shared with the rest of the pipeline: it is read from the
-PLANEFR_EXIOBASE_VERSION environment variable (set by run_full_pipeline.ps1
-/ run_pipeline_from_engine.ps1), 3.11.2 by default. The extension list is
+PLANEFR_EXIOBASE_VERSION environment variable (set by planefr.py
+from --version), 3.11.2 by default. The extension list is
 the one of the exiobase3_eeio settings (EXIOBASE_SETTINGS_FILE), so that
 F_Y_tot is produced for every extension extracted upstream.
 

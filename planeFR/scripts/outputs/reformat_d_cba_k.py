@@ -32,17 +32,17 @@ import pandas as pd
 # Shared modules of planeFR/scripts/_common
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "_common"))
 
-# Module_PlaneFR/data/<version> (version: environment variable
-# PLANEFR_EXIOBASE_VERSION, set by run_full_pipeline.ps1 / run_pipeline_from_engine.ps1)
-from planefr_paths import DATA_VERSION_DIR
+# Module_PlaneFR/data/Outputs_MatMat/<version> (version: environment variable
+# PLANEFR_EXIOBASE_VERSION, set by planefr.py from --version)
+from planefr_paths import DATA_VERSION_DIR, find_all_scenario_dirs
 
 INPUT = DATA_VERSION_DIR
 OUTPUT = INPUT
 
-# extensions/ folders of all the scenarios, listed once: an rglob over the
-# whole INPUT for each file pattern would walk the full tree at each call (very
-# slow).
-EXTENSION_DIRS = sorted([*INPUT.glob("*/extensions"), *INPUT.glob("*/*/extensions")])
+# extensions/ folders of all the scenarios (2019_raw, 2050_raw and display
+# groups), listed once: an rglob over the whole INPUT for each file pattern
+# would walk the full tree at each call (very slow).
+EXTENSION_DIRS = sorted(d / "extensions" for d in find_all_scenario_dirs())
 
 
 def find_files(pattern):

@@ -1,6 +1,6 @@
 """
-Extracts, for each IMAGE scenario of data/SSP/Scenarios, the F, x and S
-2050/2020 factors by region, and writes them into Matching_extensions_EXIOBASE_IMAGE.xlsx,
+Extracts, for each IMAGE scenario of data/Input_Shocks_MatMat/input_data (*.csv), the F, x and S
+2050/2020 factors by region, and writes them into Matching_EXIOBASE_IMAGE.xlsx,
 one sheet per scenario (sheet deleted then recreated if it already exists).
 
 For each row of the "Matching" sheet:
@@ -53,16 +53,13 @@ from openpyxl.styles import Alignment, Font
 from openpyxl.utils import column_index_from_string, get_column_letter
 
 # Shared modules of planeFR/scripts/_common
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_common"))
-from planefr_paths import MODULE_PLANEFR_DIR  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "_common"))
+from planefr_paths import MODULE_INPUT_SHOCKS_DIR  # noqa: E402
 
-sys.path.insert(0, str(MODULE_PLANEFR_DIR / "notebooks"))
-from planefr_lib import config  # noqa: E402
-
-SSP_DIR = config.DATA_DIR / "SSP"
-SCENARIOS_DIR = SSP_DIR / "Scenarios"
-NUTRIENTS_FILE = SSP_DIR / "Nutrients.xlsx"
-MATCHING_FILE = SSP_DIR / "Matching_extensions_EXIOBASE_IMAGE.xlsx"
+# IMAGE scenarios (*.csv) and Nutrients.xlsx
+SCENARIOS_DIR = MODULE_INPUT_SHOCKS_DIR / "input_data"
+NUTRIENTS_FILE = SCENARIOS_DIR / "Nutrients.xlsx"
+MATCHING_FILE = MODULE_INPUT_SHOCKS_DIR / "Matching_EXIOBASE_IMAGE.xlsx"
 
 MATCHING_SHEET = "Matching"
 REGIONS_SHEET = "Regions"

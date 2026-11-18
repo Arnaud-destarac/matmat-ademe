@@ -14,7 +14,7 @@ products) rather than the columns. The GHG extensions in S_x_dom
 S_X_DOM_EXTRA_SECTORS).
 
 The Food sectors are the 'sector' values with a 1 in the 'Food' column of the
-'M' sheet of Module_PlaneFR/data/bridge_matrices.xlsx, plus FOOD_EXTRA_SECTORS
+'M' sheet of Module_PlaneFR/data/Post_processing/bridge_matrices.xlsx, plus FOOD_EXTRA_SECTORS
 and minus FOOD_EXCLUDED_SECTORS.
 
 Each <scenario> is first copied as is, without the data .xlsx files (system/:
@@ -29,8 +29,13 @@ info.json).
 An additional 'Base_year_agri' scenario is created in each '_agri' folder: no
 shock on the system (system/ only contains detail_levels.xlsx and info.json),
 dS = 0 on the Food sectors (S unchanged) and -1 elsewhere.
+
+--only transitions / --only ssps only rebuilds one of the two _agri sets (the
+other is left untouched): used by planefr.py when only the French or
+only the SSP shocks have changed.
 """
 
+import argparse
 import json
 import shutil
 import sys
@@ -39,13 +44,13 @@ from pathlib import Path
 import pandas as pd
 
 # Shared modules of planeFR/scripts/_common
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_common"))
-from planefr_paths import MATMAT_DIR, MODULE_PLANEFR_DIR, get_ssp_base_accounts_dir  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "_common"))
+from planefr_paths import MATMAT_DIR, MODULE_POST_PROCESSING_DIR, get_ssp_base_accounts_dir  # noqa: E402
 from planefr_utils import make_pickle_portable  # noqa: E402
 
 SHOCKS_DIR = MATMAT_DIR / "data" / "4-PlaneFR" / "2-shocks"
 OUTPUTS_DIR = MATMAT_DIR / "data" / "4-PlaneFR" / "Outputs"
-BRIDGE_FILE = MODULE_PLANEFR_DIR / "data" / "bridge_matrices.xlsx"
+BRIDGE_FILE = MODULE_POST_PROCESSING_DIR / "bridge_matrices.xlsx"
 
 AGRI_SUFFIX = "_agri"
 BASE_YEAR_SCENARIO = "Base_year_agri"
@@ -204,11 +209,22 @@ def make_base_year_agri(group, template_dir, out_dir, extensions, food_sectors):
         write_extension_agri(group, out_dir, ext_name, s_name, info, food_sectors)
 
 
+# Names of the shock sets for --only
+SHOCK_SETS = {"transitions": "1-transitions_2050", "ssps": "3-SSPs_2050"}
+
+
 def main():
+    parser = argparse.ArgumentParser(description="Generates the _agri variants of the shock sets.")
+    parser.add_argument("--only", nargs="+", choices=list(SHOCK_SETS),
+                        help="only rebuild these _agri shock sets (all by default); the others are left "
+                             "untouched, e.g. 'transitions' after a change to the French shocks only")
+    args = parser.parse_args()
+    groups = [SHOCK_SETS[name] for name in args.only] if args.only else list(EXTENSIONS_BASE_DIRS)
+
     food_sectors = load_food_sectors()
     print(f"{len(food_sectors)} Food sectors: {sorted(food_sectors)}")
 
-    for group in EXTENSIONS_BASE_DIRS:
+    for group in groups:
         src_group_dir = SHOCKS_DIR / group
         out_group_dir = SHOCKS_DIR / f"{group}{AGRI_SUFFIX}"
         if out_group_dir.exists():

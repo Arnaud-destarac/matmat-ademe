@@ -18,16 +18,22 @@ of x). The row_names of my_manual_param.xlsx missing from S_extraction.xlsx are
 ignored.
 
 dS_x_dom (.pkl and .xlsx) is written, by scenario and by shocked extension, into
-MatMat/matmat-ademe/.../2-shocks/1-transitions_2050/<scenario>/extensions/dom_<lp>/.
-These files are kept from one run to the next (rebuild_shock_extensions.py no
-longer deletes them): a dS_x_dom that has become entirely zero (shocks reset to
-0 or emptied), or that of an extension which no longer has a dom_<lp> sheet in
-my_manual_param.xlsx, is therefore deleted here, so that the engine does not
-apply an outdated shock.
+MatMat/matmat-ademe/.../2-shocks/1-transitions_2050/<scenario>/extensions/dom_<lp>/,
+together with the two files the engine needs to load it:
+    - detail_levels.xlsx, copied from the France accounts the engine shocks
+      (Outputs/France/Base_year_2015/extensions/dom_<lp>/, written by
+      update_calib_fr): extension categories + regions / sectors / final
+      demand categories, the same as the system of the shock scenarios;
+    - info.json: that of the system of the scenario, plus extension_name.
+Only the extensions with a non-zero dS_x_dom get a folder: the engine skips
+the extensions without a shock folder. A folder whose dS_x_dom has become
+entirely zero (shocks reset to 0 or emptied), or of an extension which no
+longer has a dom_<lp> sheet in my_manual_param.xlsx, is therefore deleted
+here, so that the engine does not apply an outdated shock.
 
 The "F_Y_tot" shocks of the same file have no sectoral dimension: they are
 applied directly, in place, in
-Module_PlaneFR/data/<version>/[<group>/]<scenario>/extensions/dom_<lp>/F_Y_tot.pkl,
+Module_PlaneFR/data/Outputs_MatMat/<version>/[<group>/]<scenario>/extensions/dom_<lp>/F_Y_tot.pkl,
 recomputing each time new_value = base_year value (FY_<lp> sheet of
 S_extraction.xlsx) x (1 + shock). Starting from the base_year value (and not
 from the value already in the F_Y_tot.pkl of the scenario) makes the script
@@ -49,21 +55,25 @@ dS_x_dom (useful at the end of a chain when the engine will not be rerun).
 
 import argparse
 import json
+import shutil
 import sys
 from pathlib import Path
 
 import pandas as pd
 
 # Shared modules of planeFR/scripts/_common
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_common"))
-from planefr_paths import DATA_VERSION_DIR, MATMAT_DIR, MODULE_PLANEFR_DIR, PARAMETERS_DIR  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "_common"))
+from planefr_paths import DATA_VERSION_DIR, MATMAT_DIR, find_all_scenario_dirs, MODULE_INPUT_SHOCKS_DIR, PARAMETERS_DIR  # noqa: E402
 from planefr_utils import make_pickle_portable  # noqa: E402
 
-S_EXTRACTION_FILE = MODULE_PLANEFR_DIR / "data" / "S_extraction.xlsx"
+S_EXTRACTION_FILE = MODULE_INPUT_SHOCKS_DIR / "S_extraction.xlsx"
 MANUAL_PARAM_FILE = PARAMETERS_DIR / "a-manual_shocks" / "my_manual_param.xlsx"
 SHOCKS_OUTPUT_DIR = MATMAT_DIR / "data" / "4-PlaneFR" / "2-shocks" / "1-transitions_2050"
 
 BASE_YEAR_NAME = "Base_year_2015"
+# France accounts shocked by the engine (update_calib_fr output): source of the
+# detail_levels.xlsx of the shocked extensions
+CALIB_ACCOUNTS_DIR = MATMAT_DIR / "data" / "4-PlaneFR" / "Outputs" / "France" / BASE_YEAR_NAME
 # Base year of the shocked scenarios (base_year of their system/info.json): that
 # of the FY_<lp> values of S_extraction.xlsx (BASE_YEAR_NAME)
 BASE_YEAR = "2015"
@@ -104,7 +114,7 @@ def find_shocked_scenario_dirs():
     base year BASE_YEAR. The base years without shock (empty scenario_name,
     Base_year_agri...) are not retained."""
     by_scenario = {short: [] for short in SCENARIO_FOLDER_NAMES}
-    for scenario_dir in find_scenario_dirs(DATA_VERSION_DIR):
+    for scenario_dir in find_all_scenario_dirs():
         info = read_scenario_info(scenario_dir)
         if info.get("scenario_name") in by_scenario and str(info.get("base_year")) == BASE_YEAR:
             by_scenario[info["scenario_name"]].append(scenario_dir)
@@ -174,29 +184,37 @@ def compute_ds(lp_name, x_dom):
     return ds_by_scenario
 
 
-DS_FILES = ("dS_x_dom.pkl", "dS_x_dom.xlsx")
+def remove_extension_dir(ext_dir):
+    """Deletes the shock folder of an extension (dS_x_dom of a previous run),
+    so that an outdated shock is not applied."""
+    if ext_dir.exists():
+        shutil.rmtree(ext_dir)
+        print(f"[remove] {ext_dir}")
 
 
-def remove_ds_outputs(out_dir):
-    """Deletes the dS_x_dom of a previous run in out_dir (kept by
-    rebuild_shock_extensions.py), so that an outdated shock is not applied."""
-    for name in DS_FILES:
-        path = out_dir / name
-        if path.exists():
-            path.unlink()
-            print(f"[remove] {path}")
-
-
-def remove_orphan_ds_outputs(lp_names):
-    """Deletes the dS_x_dom of the dom_<lp> extensions that no longer have a
-    sheet in my_manual_param.xlsx."""
+def remove_orphan_extension_dirs(lp_names):
+    """Deletes the extension shock folders that are not dom_<lp> of an
+    extension of my_manual_param.xlsx."""
+    kept = {f"dom_{lp}" for lp in lp_names}
     for scenario_dir in (d for d in SHOCKS_OUTPUT_DIR.iterdir() if d.is_dir()):
         extensions_dir = scenario_dir / "extensions"
         if not extensions_dir.is_dir():
             continue
         for ext_dir in extensions_dir.iterdir():
-            if ext_dir.is_dir() and ext_dir.name.startswith("dom_") and ext_dir.name[len("dom_"):] not in lp_names:
-                remove_ds_outputs(ext_dir)
+            if ext_dir.name not in kept:
+                remove_extension_dir(ext_dir) if ext_dir.is_dir() else ext_dir.unlink()
+
+
+def write_extension_metadata(lp_name, out_dir):
+    """detail_levels.xlsx (copied from the France accounts the engine shocks)
+    and info.json (system/info.json of the scenario + extension_name)."""
+    ext_name = f"dom_{lp_name}"
+    calib_dl = CALIB_ACCOUNTS_DIR / "extensions" / ext_name / "detail_levels.xlsx"
+    if not calib_dl.is_file():
+        raise FileNotFoundError(f"Detail levels not found (run update_calib_fr first?): {calib_dl}")
+    shutil.copyfile(calib_dl, out_dir / "detail_levels.xlsx")
+    info = {**read_scenario_info(out_dir.parents[1]), "extension_name": ext_name}
+    (out_dir / "info.json").write_text(json.dumps(info, indent=2), encoding="utf-8")
 
 
 def write_ds_outputs(lp_name, ds_by_scenario):
@@ -204,9 +222,9 @@ def write_ds_outputs(lp_name, ds_by_scenario):
         ds = ds_by_scenario[short]
         out_dir = SHOCKS_OUTPUT_DIR / folder_name / "extensions" / f"dom_{lp_name}"
         if (ds == 0).all().all():
-            # no F_x_dom shock for this scenario/extension pair: a dS_x_dom of a
-            # previous run must not remain
-            remove_ds_outputs(out_dir)
+            # no F_x_dom shock for this scenario/extension pair: the shock
+            # folder of a previous run must not remain
+            remove_extension_dir(out_dir)
             continue
 
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -214,7 +232,8 @@ def write_ds_outputs(lp_name, ds_by_scenario):
             ds.index = pd.MultiIndex.from_arrays([ds.index], names=ds.index.names)
         make_pickle_portable(ds).to_pickle(out_dir / "dS_x_dom.pkl")
         ds.to_excel(out_dir / "dS_x_dom.xlsx", sheet_name="dS_x_dom")
-        print(f"[write] {out_dir / 'dS_x_dom.xlsx'} (+ .pkl)")
+        write_extension_metadata(lp_name, out_dir)
+        print(f"[write] {out_dir / 'dS_x_dom.xlsx'} (+ .pkl, detail_levels.xlsx, info.json)")
 
 
 def apply_f_y_tot_shocks(lp_name, scenario_dirs):
@@ -280,7 +299,7 @@ def main():
     x_dom = None if args.only_f_y_tot else load_x_domestic()
     lp_names = get_manual_lp_names()
     if not args.only_f_y_tot:
-        remove_orphan_ds_outputs(lp_names)
+        remove_orphan_extension_dirs(lp_names)
 
     for lp_name in lp_names:
         print(f"=== {lp_name} ===")

@@ -15,13 +15,13 @@ Sheets produced:
 import pandas as pd
 
 from compute_ds_x_dom import BASE_YEAR_NAME, S_EXTRACTION_FILE, SCENARIO_FOLDER_NAMES
-from planefr_paths import DATA_VERSION_DIR
+from planefr_paths import RAW_2050_DIR
 
 # Engine outputs of the no_SSP group, under the names written by
-# run_engine_batch.ps1 and expected by compute_ds_x_dom.py (rows of the "x"
+# the France engine step (planefr.py) and expected by compute_ds_x_dom.py (rows of the "x"
 # sheet). The list is explicit, so that other folders placed in no_SSP (e.g.
 # copies renamed by hand) are ignored.
-NO_SSP_DIR = DATA_VERSION_DIR / "no_SSP"
+NO_SSP_DIR = RAW_2050_DIR / "no_SSP"
 BASE_YEAR_FOLDER = NO_SSP_DIR / BASE_YEAR_NAME
 OTHER_SCENARIO_FOLDERS = [NO_SSP_DIR / name for name in SCENARIO_FOLDER_NAMES.values()]
 
@@ -32,7 +32,7 @@ def check_folders():
     missing = [f for f in [BASE_YEAR_FOLDER] + OTHER_SCENARIO_FOLDERS if not (f / "system" / "x.pkl").is_file()]
     if missing:
         raise FileNotFoundError(
-            "Engine outputs missing (run run_engine_batch.ps1 first): "
+            "Engine outputs missing (run planefr.py step engine_no_ssp first): "
             + ", ".join(str(f) for f in missing)
         )
 
