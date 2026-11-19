@@ -7,9 +7,11 @@ Sheets produced:
   with one additional row per 2050 scenario (S1-S4, TEND) for comparison.
   The "scenario" column gives the name of the source folder of each row.
 - "Fx_<lp>": F_x_dom.pkl of each dom_* extension of Base_year_2015
-  (indicators as rows, sectors as columns, original format).
+  (indicators as rows, sectors as columns; also for ghg_combustion and
+  raw_materials, whose F_x_dom is recomputed by sector by reformat_d_cba_k.py).
 - "FY_<lp>": F_Y_tot.pkl of each dom_* extension of Base_year_2015, when this
-  file exists (missing for ghg_combustion, ghg_emissions, raw_materials).
+  file exists (missing for ghg_emissions and raw_materials; for
+  ghg_combustion, combustion by households written by reformat_d_cba_k.py).
 """
 
 import pandas as pd
