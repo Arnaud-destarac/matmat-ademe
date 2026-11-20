@@ -142,15 +142,49 @@ def load_f_y_tot_base(lp_name):
     return pd.read_excel(S_EXTRACTION_FILE, sheet_name=f"FY_{lp_name}", header=list(range(2)), index_col=0)
 
 
+MANUAL_FIELD_COLUMNS = ("variable", "row_name")  # required fields of the manual shocks
+
+
 def load_manual_shocks(lp_name):
-    """Rebuilds a clean table from my_manual_param.xlsx: row 1 holds the
-    scenario names (S1..TEND), row 3 the field names (variable, row_region,
-    row_name, ...), the data start on row 4."""
-    raw = pd.read_excel(MANUAL_PARAM_FILE, sheet_name=f"dom_{lp_name}", header=None)
-    scenario_cols = raw.iloc[0, 7:].tolist()
-    field_cols = raw.iloc[2, 0:7].tolist()
-    data = raw.iloc[3:].reset_index(drop=True)
-    data.columns = field_cols + scenario_cols
+    """Rebuilds a clean table from the dom_<lp> sheet of my_manual_param.xlsx.
+
+    Read by content, not by position:
+    - field row: the first row holding MANUAL_FIELD_COLUMNS ("variable",
+      "row_name"); its named cells give the field columns (variable,
+      row_region, row_name, ...);
+    - scenario columns: the cells, above the field row, holding a scenario
+      name of SCENARIO_FOLDER_NAMES (S1...TEND);
+    - data: the rows below the field row.
+    A missing or duplicated scenario, or a missing field, raises a ValueError
+    instead of reading the shocks of one scenario under the name of another.
+    """
+    sheet = f"dom_{lp_name}"
+    raw = pd.read_excel(MANUAL_PARAM_FILE, sheet_name=sheet, header=None)
+    where = f"sheet '{sheet}' of {MANUAL_PARAM_FILE.name}"
+
+    is_field_row = raw.apply(lambda row: set(MANUAL_FIELD_COLUMNS) <= {str(v).strip() for v in row}, axis=1)
+    if not is_field_row.any():
+        raise ValueError(f"{where}: no row with the fields {list(MANUAL_FIELD_COLUMNS)}")
+    field_row = int(is_field_row.to_numpy().argmax())
+    fields = {col: str(v).strip() for col, v in raw.iloc[field_row].items() if isinstance(v, str) and v.strip()}
+
+    scenario_cells = [(col, str(v).strip()) for _, row in raw.iloc[:field_row].iterrows()
+                      for col, v in row.items() if str(v).strip() in SCENARIO_FOLDER_NAMES]
+    scenarios = {}
+    for col, name in scenario_cells:
+        if name in scenarios.values():
+            raise ValueError(f"{where}: scenario '{name}' found in several columns")
+        scenarios[col] = name
+    missing = [s for s in SCENARIO_FOLDER_NAMES if s not in scenarios.values()]
+    if missing:
+        raise ValueError(f"{where}: scenario column(s) {missing} not found above the field row")
+    overlap = set(fields) & set(scenarios)
+    if overlap:
+        raise ValueError(f"{where}: columns {sorted(overlap)} are both a field and a scenario")
+
+    columns = {**fields, **scenarios}
+    data = raw.iloc[field_row + 1:, list(columns)].reset_index(drop=True)
+    data.columns = list(columns.values())
     return data
 
 

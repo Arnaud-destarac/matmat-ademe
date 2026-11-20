@@ -174,6 +174,26 @@ def test_gmrio_to_snac_s_ssps_reference_first_and_f_x_dom_copied(layout):
     assert copied.read_text() == "Base_year_agri"
 
 
+def test_gmrio_to_snac_s_ssps_reference_from_base_year_output(layout):
+    """Without a Base_year_2015 shock, the F_x_dom are taken from the
+    base-year gmrio_to_snac_s output (no folder to create by hand)."""
+    make_dirs(layout, "4-PlaneFR/2-shocks/3-SSPs_2050", ["SSP2_2050"])
+    extensions = read_template(layout, "2-gmrio_to_snac_s/gmrio_to_snac_S_SSPs.json")["extension_names"]
+    base = layout.data_path("4-PlaneFR/Outputs_inter/gmrio_to_snac_s/3.11.2_pxp_2015")
+    for ext in extensions:
+        (base / "extensions" / f"dom_{ext}").mkdir(parents=True)
+        (base / "extensions" / f"dom_{ext}" / "F_x_dom.pkl").write_text("base 2015")
+
+    runner = RecordingRunner()
+    assert planefr.Pipeline(layout, "3.11.2", runner).gmrio_to_snac_s_ssps() == 0
+
+    assert [c["settings"]["path_out"] for c in runner.matmat("gmrio_to_snac_s")] == [
+        "./4-PlaneFR/Outputs_inter/gmrio_to_snac_s/SSPs/SSP2_2050"]
+    copied = layout.data_path("4-PlaneFR/Outputs_inter/gmrio_to_snac_s/SSPs/SSP2_2050"
+                              f"/extensions/dom_{extensions[0]}/F_x_dom.pkl")
+    assert copied.read_text() == "base 2015"
+
+
 def test_update_calib_fr_runs_from_datapack(layout):
     runner = RecordingRunner()
     assert planefr.Pipeline(layout, "3.11.2", runner).update_calib_fr() == 0

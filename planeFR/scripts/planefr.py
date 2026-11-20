@@ -366,6 +366,14 @@ class Pipeline:
 
         scenarios = [d.name for d in batch.subdirs(self.layout.data_path(f"{SSP_SHOCKS}{suffix}"))]
         scenarios.sort(key=lambda name: (add_suffix(name, suffix) != reference, name.lower()))
+        if reference in (add_suffix(s, suffix) for s in scenarios):
+            ref_dir = self.layout.data_path(posixpath.join(out_base, reference))
+        else:
+            # The reference is not a shock scenario (Base_year_2015: the SSP
+            # shocks are applied to the base-year World accounts): its F_x_dom
+            # are those of the base-year gmrio_to_snac_s output (step
+            # gmrio_to_snac_s), for the base year of the SSP shocks.
+            ref_dir = self._base_year_snac_dir()
 
         for scenario in scenarios:
             name = add_suffix(scenario, suffix)
@@ -380,8 +388,7 @@ class Pipeline:
             if name == reference:
                 continue
 
-            ref_dir = self.layout.data_path(posixpath.join(out_base, reference))
-            scenario_out = self.layout.data_path(posixpath.join(out_base, name))
+            scenario_out =self.layout.data_path(posixpath.join(out_base, name))
             log(f"--- {scenario}: F_x_dom replaced by those of {ref_dir} ---")
             for ext in template["extension_names"]:
                 src = ref_dir / "extensions" / f"dom_{ext}" / "F_x_dom.pkl"
@@ -392,6 +399,17 @@ class Pipeline:
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(src, dst)
         return batch.result()
+
+    def _base_year_snac_dir(self):
+        """gmrio_to_snac_s output of the base year of the SSP shocks
+        (<version>_pxp_<year>), the year being that of the World accounts the
+        engine_ssps step shocks (path_in.accounts of settings_engine_SSPs.json)."""
+        accounts = read_template(self.layout, SSP_ENGINE_TEMPLATE)["path_in"]["accounts"]
+        years = re.findall(r"20\d{2}", posixpath.basename(accounts))
+        if not years:
+            raise ValueError(f"no base year in the SSP base accounts: {accounts}")
+        out = read_template(self.layout, GMRIO_FR_TEMPLATE)["path_out"]
+        return self.layout.data_path(set_version_in_path(set_year_in_path(out, int(years[-1])), self.version))
 
     def _check_datapack(self, batch):
         if not self.layout.datapack_dir.is_dir():
